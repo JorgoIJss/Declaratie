@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Send, Trash2, Pencil, History, Settings, Receipt, Upload, Save, Eye, Paperclip } from "lucide-react";
 
-const STORAGE_KEYS = {
-  batch: "decl-webapp-current-batch",
-  history: "decl-webapp-history",
-  settings: "decl-webapp-settings",
-};
+const SETTINGS_ROW_ID = "00000000-0000-0000-0000-000000000001";
+const RECEIPTS_BUCKET = "declaratie-bonnen";
 
 const defaultSettings = {
   smtpHost: "",
@@ -46,7 +44,10 @@ const blankDraft = () => ({
   attachment: null,
   attachmentName: "",
   attachmentType: "",
+  attachmentPath: "",
+  attachmentPublicUrl: "",
   createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 });
 
 function euro(value) {
@@ -74,7 +75,7 @@ function detailText(d) {
 
 function buildUniqueFileName(declaration, index, submitterName = "Jorgo") {
   const ext = declaration.attachmentName?.split(".").pop() || "jpg";
-  const stamp = new Date(declaration.createdAt).toISOString().replace(/[:.]/g, "-");
+  const stamp = new Date(declaration.createdAt || new Date().toISOString()).toISOString().replace(/[:.]/g, "-");
   return `${compactDate(declaration.date)}_${fileSafe(declaration.supplier)}_${fileSafe(declaration.reason)}_${index}_${stamp}_${fileSafe(submitterName)}.${ext}`;
 }
 
@@ -88,25 +89,7 @@ function buildEmailData(batch, settings) {
 
     const row = `1   ${compactDate(d.date).padEnd(12)}${(d.supplier || "").padEnd(18)}${(d.reason || "").padEnd(18)}${euro(d.amount).padEnd(10)}${(d.hasReceipt ? "Ja" : "Nee").padEnd(5)}${(detailText(d) || "").padEnd(25)}${buildUniqueFileName(d, 1, settings.signatureName)}`;
 
-    const textBody = `Beste penningmeester,
-
-
-Hierbij dien ik een declaratie in.
-
-
-${header}
-${separator}
-${row}
-
-
-
-IBAN: ${settings.iban}
-Ten name van: ${settings.accountName}
-
-
-
-Met vriendelijke groet,
-${settings.signatureName}`;
+    const textBody = `Beste penningmeester,\n\n\nHierbij dien ik een declaratie in.\n\n\n${header}\n${separator}\n${row}\n\n\n\nIBAN: ${settings.iban}\nTen name van: ${settings.accountName}\n\n\n\nMet vriendelijke groet,\n${settings.signatureName}`;
 
     const htmlBody = `
       <html>
@@ -226,6 +209,85 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function mapSettingsFromDb(row) {
+  if (!row) return { ...defaultSettings };
+  return {
+    ...defaultSettings,
+    smtpHost: row.smtp_host ?? defaultSettings.smtpHost,
+    smtpPort: row.smtp_port ?? defaultSettings.smtpPort,
+    smtpSecure: row.smtp_secure ?? defaultSettings.smtpSecure,
+    smtpUsername: row.smtp_username ?? defaultSettings.smtpUsername,
+    smtpPassword: row.smtp_password ?? defaultSettings.smtpPassword,
+    fromEmail: row.from_email ?? defaultSettings.fromEmail,
+    toEmail: row.to_email ?? defaultSettings.toEmail,
+    fromName: row.from_name ?? defaultSettings.fromName,
+    iban: row.iban ?? defaultSettings.iban,
+    accountName: row.account_name ?? defaultSettings.accountName,
+    signatureName: row.signature_name ?? defaultSettings.signatureName,
+    sendIndividuallyByDefault: row.send_individually_by_default ?? defaultSettings.sendIndividuallyByDefault,
+  };
+}
+
+function mapSettingsToDb(settings) {
+  return {
+    id: SETTINGS_ROW_ID,
+    smtp_host: settings.smtpHost,
+    smtp_port: settings.smtpPort,
+    smtp_secure: settings.smtpSecure,
+    smtp_username: settings.smtpUsername,
+    smtp_password: settings.smtpPassword,
+    from_email: settings.fromEmail,
+    to_email: settings.toEmail,
+    from_name: settings.fromName,
+    iban: settings.iban,
+    account_name: settings.accountName,
+    signature_name: settings.signatureName,
+    send_individually_by_default: settings.sendIndividuallyByDefault,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapDeclarationFromDb(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    amount: row.amount != null ? String(row.amount) : "",
+    supplier: row.supplier || "",
+    reason: row.reason || "",
+    hasReceipt: row.has_receipt ?? true,
+    noReceiptReason: row.no_receipt_reason || "",
+    note: row.note || "",
+    attachment: null,
+    attachmentName: row.attachment_name || "",
+    attachmentType: row.attachment_type || "",
+    attachmentPath: row.attachment_path || "",
+    attachmentPublicUrl: row.attachment_public_url || "",
+    submitterName: row.submitter_name || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at,
+  };
+}
+
+function mapDeclarationToDb(draft) {
+  return {
+    id: draft.id,
+    date: draft.date,
+    amount: Number(String(draft.amount).replace(",", ".")),
+    supplier: draft.supplier,
+    reason: draft.reason,
+    has_receipt: draft.hasReceipt,
+    no_receipt_reason: draft.noReceiptReason || null,
+    note: draft.note || null,
+    attachment_name: draft.attachmentName || null,
+    attachment_type: draft.attachmentType || null,
+    attachment_path: draft.attachmentPath || null,
+    attachment_public_url: draft.attachmentPublicUrl || null,
+    submitter_name: draft.submitterName || null,
+    created_at: draft.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export default function DeclaratiesWebApp() {
   const [tab, setTab] = useState("declaraties");
   const [batch, setBatch] = useState([]);
@@ -237,35 +299,146 @@ export default function DeclaratiesWebApp() {
   const [message, setMessage] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isBootLoading, setIsBootLoading] = useState(true);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [previewState, setPreviewState] = useState({ open: false, groups: [], sendIndividually: false });
-
-  useEffect(() => {
-    const savedBatch = localStorage.getItem(STORAGE_KEYS.batch);
-    const savedHistory = localStorage.getItem(STORAGE_KEYS.history);
-    const savedSettings = localStorage.getItem(STORAGE_KEYS.settings);
-    if (savedBatch) setBatch(JSON.parse(savedBatch));
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
-    if (savedSettings) setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) });
-  }, []);
-
-  useEffect(() => {
-    const persistableBatch = batch.map((item) => ({ ...item, attachment: null }));
-    localStorage.setItem(STORAGE_KEYS.batch, JSON.stringify(persistableBatch));
-  }, [batch]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
-  }, [history]);
-
-  useEffect(() => {
-    const persistable = { ...settings, smtpPassword: settings.smtpPassword };
-    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(persistable));
-  }, [settings]);
+  const settingsLoadedRef = useRef(false);
+  const settingsAutoSaveTimeoutRef = useRef(null);
 
   const total = useMemo(
     () => batch.reduce((sum, d) => sum + (Number(String(d.amount).replace(",", ".")) || 0), 0),
     [batch]
   );
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadAppData() {
+      setIsBootLoading(true);
+      try {
+        const [settingsRes, batchRes, historyRes] = await Promise.all([
+          supabase.from("user_settings").select("*").eq("id", SETTINGS_ROW_ID).maybeSingle(),
+          supabase.from("declarations").select("*").order("created_at", { ascending: true }),
+          supabase.from("send_history").select("*").order("sent_at", { ascending: false }),
+        ]);
+
+        if (settingsRes.error) throw settingsRes.error;
+        if (batchRes.error) throw batchRes.error;
+        if (historyRes.error) throw historyRes.error;
+
+        if (!active) return;
+
+        setSettings(mapSettingsFromDb(settingsRes.data));
+        setBatch((batchRes.data || []).map(mapDeclarationFromDb));
+        setHistory((historyRes.data || []).map((row) => ({
+          id: row.id,
+          sentAt: row.sent_at,
+          mode: row.mode,
+          subject: row.subject,
+          declarations: Array.from({ length: row.declaration_count || 0 }, () => ({})),
+        })));
+
+        settingsLoadedRef.current = true;
+      } catch (err) {
+        console.error(err);
+        if (active) {
+          setMessage(`Laden uit Supabase mislukt: ${err.message}`);
+        }
+      } finally {
+        if (active) {
+          setIsBootLoading(false);
+        }
+      }
+    }
+
+    loadAppData();
+
+    return () => {
+      active = false;
+      if (settingsAutoSaveTimeoutRef.current) {
+        clearTimeout(settingsAutoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+  
+
+  useEffect(() => {
+    if (!settingsLoadedRef.current || isBootLoading) return;
+
+    if (settingsAutoSaveTimeoutRef.current) {
+      clearTimeout(settingsAutoSaveTimeoutRef.current);
+    }
+
+    settingsAutoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await upsertSettings(settings, false);
+      } catch (err) {
+        console.error(err);
+      }
+    }, 700);
+
+    return () => {
+      if (settingsAutoSaveTimeoutRef.current) {
+        clearTimeout(settingsAutoSaveTimeoutRef.current);
+      }
+    };
+  }, [settings, isBootLoading]);
+
+  async function upsertSettings(nextSettings, showFeedback = true) {
+    setIsSavingSettings(true);
+    const { error } = await supabase.from("user_settings").upsert(mapSettingsToDb(nextSettings), { onConflict: "id" });
+    setIsSavingSettings(false);
+
+    if (error) {
+      if (showFeedback) setMessage(`Opslaan instellingen mislukt: ${error.message}`);
+      throw error;
+    }
+
+    if (showFeedback) {
+      setMessage("Instellingen opgeslagen in Supabase.");
+    }
+  }
+
+  async function uploadAttachment(file, declaration) {
+    if (!file) {
+      return {
+        attachmentName: declaration.attachmentName || "",
+        attachmentType: declaration.attachmentType || "",
+        attachmentPath: declaration.attachmentPath || "",
+        attachmentPublicUrl: declaration.attachmentPublicUrl || "",
+      };
+    }
+
+    const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+    const fileName = `${declaration.id}-${Date.now()}.${ext}`;
+    const filePath = `receipts/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(RECEIPTS_BUCKET)
+      .upload(filePath, file, { upsert: true, contentType: file.type || "application/octet-stream" });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(filePath);
+
+    return {
+      attachmentName: file.name,
+      attachmentType: file.type || declaration.attachmentType || "",
+      attachmentPath: filePath,
+      attachmentPublicUrl: publicUrlData?.publicUrl || "",
+    };
+  }
+
+  async function removeAttachmentByPath(filePath) {
+    if (!filePath) return;
+    const { error } = await supabase.storage.from(RECEIPTS_BUCKET).remove([filePath]);
+    if (error) {
+      console.error("Verwijderen bijlage mislukt:", error.message);
+    }
+  }
 
   function openNewDialog() {
     setEditingId(null);
@@ -277,51 +450,113 @@ export default function DeclaratiesWebApp() {
   function openEditDialog(item) {
     setEditingId(item.id);
     setDialogError("");
-    setDraft(item);
+    setDraft({ ...item, attachment: null });
     setIsDialogOpen(true);
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     setDialogError("");
+
     if (!draft.date || !draft.amount || !draft.supplier || !draft.reason) {
       setDialogError("Vul datum, bedrag, leverancier en reden in.");
       return;
     }
+
     const normalizedAmount = Number(String(draft.amount).replace(",", "."));
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
       setDialogError("Vul een geldig bedrag in, bijvoorbeeld 12,50.");
       return;
     }
+
     if (!draft.hasReceipt && !draft.noReceiptReason) {
       setDialogError("Vul een reden in als er geen bon aanwezig is.");
       return;
     }
+
     const hasExistingAttachment = Boolean(draft.attachment || draft.attachmentName);
     if (!hasExistingAttachment) {
       setDialogError("Voeg een foto of bestand van de bon toe.");
       return;
     }
 
-    const normalized = {
-      ...draft,
-      submitterName: settings.signatureName || "Jorgo",
-      amount: String(draft.amount).replace(",", "."),
-      createdAt: draft.createdAt || new Date().toISOString(),
-    };
+    setIsSavingDraft(true);
 
-    setBatch((prev) => {
-      const next = editingId ? prev.map((x) => (x.id === editingId ? normalized : x)) : [...prev, normalized];
-      return next.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-    });
-    setMessage("Declaratie toegevoegd aan de batch.");
-    setDialogError("");
-    setIsDialogOpen(false);
-    setDraft(blankDraft());
-    setEditingId(null);
+    try {
+      const previousVersion = editingId ? batch.find((x) => x.id === editingId) : null;
+      const attachmentMeta = await uploadAttachment(draft.attachment, draft);
+
+      if (draft.attachment && previousVersion?.attachmentPath && previousVersion.attachmentPath !== attachmentMeta.attachmentPath) {
+        await removeAttachmentByPath(previousVersion.attachmentPath);
+      }
+
+      const normalized = {
+        ...draft,
+        ...attachmentMeta,
+        attachment: null,
+        submitterName: settings.signatureName || "Jorgo",
+        amount: String(draft.amount).replace(",", "."),
+        createdAt: draft.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const payload = mapDeclarationToDb(normalized);
+      const { error } = await supabase.from("declarations").upsert(payload, { onConflict: "id" });
+      if (error) throw error;
+
+      setBatch((prev) => {
+        const next = editingId ? prev.map((x) => (x.id === editingId ? normalized : x)) : [...prev, normalized];
+        return next.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
+      });
+
+      setMessage(editingId ? "Declaratie bijgewerkt in Supabase." : "Declaratie toegevoegd aan de batch in Supabase.");
+      setDialogError("");
+      setIsDialogOpen(false);
+      setDraft(blankDraft());
+      setEditingId(null);
+    } catch (err) {
+      console.error(err);
+      setDialogError(`Opslaan mislukt: ${err.message}`);
+    } finally {
+      setIsSavingDraft(false);
+    }
   }
 
-  function deleteDraft(id) {
-    setBatch((prev) => prev.filter((x) => x.id !== id));
+  async function deleteDraft(id) {
+    const item = batch.find((x) => x.id === id);
+    try {
+      const { error } = await supabase.from("declarations").delete().eq("id", id);
+      if (error) throw error;
+
+      if (item?.attachmentPath) {
+        await removeAttachmentByPath(item.attachmentPath);
+      }
+
+      setBatch((prev) => prev.filter((x) => x.id !== id));
+      setMessage("Declaratie verwijderd uit Supabase.");
+    } catch (err) {
+      console.error(err);
+      setMessage(`Verwijderen mislukt: ${err.message}`);
+    }
+  }
+
+  async function clearBatch() {
+    if (!batch.length) return;
+
+    try {
+      const filePaths = batch.map((item) => item.attachmentPath).filter(Boolean);
+      const { error } = await supabase.from("declarations").delete().neq("id", "__none__");
+      if (error) throw error;
+
+      if (filePaths.length) {
+        await supabase.storage.from(RECEIPTS_BUCKET).remove(filePaths);
+      }
+
+      setBatch([]);
+      setMessage("Batch geleegd in Supabase.");
+    } catch (err) {
+      console.error(err);
+      setMessage(`Batch leegmaken mislukt: ${err.message}`);
+    }
   }
 
   function openPreview(sendIndividually = settings.sendIndividuallyByDefault) {
@@ -332,6 +567,46 @@ export default function DeclaratiesWebApp() {
     const groups = sendIndividually ? batch.map((d) => [d]) : [batch];
     setPreviewState({ open: true, groups, sendIndividually });
     setMessage("");
+  }
+
+  async function insertHistoryGroup(group, emailData) {
+    const historyId = crypto.randomUUID();
+
+    const historyRow = {
+      id: historyId,
+      sent_at: new Date().toISOString(),
+      mode: emailData.mode,
+      subject: emailData.subject,
+      declaration_count: group.length,
+    };
+
+    const { error: historyError } = await supabase.from("send_history").insert(historyRow);
+    if (historyError) throw historyError;
+
+    const itemRows = group.map((g, index) => ({
+      history_id: historyId,
+      declaration_id: g.id,
+      date: g.date,
+      supplier: g.supplier,
+      reason: g.reason,
+      amount: Number(String(g.amount).replace(",", ".")),
+      has_receipt: g.hasReceipt,
+      no_receipt_reason: g.noReceiptReason || null,
+      note: g.note || null,
+      attachment_name: g.attachmentName || null,
+      position: index + 1,
+    }));
+
+    const { error: itemsError } = await supabase.from("send_history_items").insert(itemRows);
+    if (itemsError) throw itemsError;
+
+    return {
+      id: historyId,
+      sentAt: historyRow.sent_at,
+      mode: historyRow.mode,
+      subject: historyRow.subject,
+      declarations: group,
+    };
   }
 
   async function sendBatch(sendIndividually = settings.sendIndividuallyByDefault) {
@@ -347,39 +622,42 @@ export default function DeclaratiesWebApp() {
 
     setIsSending(true);
     setMessage("");
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 900));
       const groups = sendIndividually ? batch.map((d) => [d]) : [batch];
+      const historyEntries = [];
+
       for (const group of groups) {
         const emailData = buildEmailData(group, settings);
-        setHistory((prev) => [
-          {
-            id: crypto.randomUUID(),
-            sentAt: new Date().toISOString(),
-            mode: emailData.mode,
-            subject: emailData.subject,
-            declarations: group.map((g) => ({
-              id: g.id,
-              date: g.date,
-              supplier: g.supplier,
-              reason: g.reason,
-              amount: g.amount,
-              hasReceipt: g.hasReceipt,
-              noReceiptReason: g.noReceiptReason,
-              note: g.note,
-              attachmentName: g.attachmentName,
-            })),
-          },
-          ...prev,
-        ]);
+        const historyEntry = await insertHistoryGroup(group, emailData);
+        historyEntries.push(historyEntry);
       }
+
+      const filePaths = batch.map((item) => item.attachmentPath).filter(Boolean);
+      const { error: deleteError } = await supabase.from("declarations").delete().neq("id", "__none__");
+      if (deleteError) throw deleteError;
+
+      if (filePaths.length) {
+        await supabase.storage.from(RECEIPTS_BUCKET).remove(filePaths);
+      }
+
+      setHistory((prev) => [...historyEntries, ...prev]);
       setBatch([]);
       setTab("declaraties");
-      setMessage("Demo: mail succesvol verwerkt. De batch is geleegd.");
+      setMessage("Demo: mail verwerkt, historie opgeslagen in Supabase en batch geleegd.");
     } catch (err) {
+      console.error(err);
       setMessage(`Verzenden mislukt: ${err.message}`);
     } finally {
       setIsSending(false);
+    }
+  }
+
+  async function saveSettingsToSupabase() {
+    try {
+      await upsertSettings(settings, true);
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -389,14 +667,22 @@ export default function DeclaratiesWebApp() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Declaraties webapp</h1>
-            <p className="text-sm text-slate-600">Klikbare demo van jouw declaratie-app met lokale opslag en conceptverzending.</p>
+            <p className="text-sm text-slate-600">Alle batch-, historie-, settings- en bondata worden nu uit Supabase geladen en daarin opgeslagen.</p>
           </div>
-          <Button onClick={openNewDialog} className="rounded-2xl"><Plus className="mr-2 h-4 w-4" />Nieuwe declaratie</Button>
+          <Button onClick={openNewDialog} className="rounded-2xl" disabled={isBootLoading}>
+            <Plus className="mr-2 h-4 w-4" />Nieuwe declaratie
+          </Button>
         </div>
 
         {message && (
           <Alert className="rounded-2xl">
             <AlertDescription>{message}</AlertDescription>
+          </Alert>
+        )}
+
+        {isBootLoading && (
+          <Alert className="rounded-2xl border-blue-200 bg-blue-50 text-blue-900">
+            <AlertDescription>Gegevens worden geladen uit Supabase...</AlertDescription>
           </Alert>
         )}
 
@@ -455,6 +741,7 @@ export default function DeclaratiesWebApp() {
                   )}
                 </CardContent>
               </Card>
+			  
 
               <Card className="rounded-3xl shadow-sm">
                 <CardHeader>
@@ -470,10 +757,10 @@ export default function DeclaratiesWebApp() {
                     <div className="text-2xl font-semibold">{euro(total)}</div>
                   </div>
                   <Separator />
-                  <Button className="w-full rounded-2xl" onClick={() => openPreview(false)} disabled={isSending || batch.length === 0}><Eye className="mr-2 h-4 w-4" />Bekijk batchmail</Button>
-                  <Button className="w-full rounded-2xl" variant="secondary" onClick={() => openPreview(true)} disabled={isSending || batch.length === 0}><Eye className="mr-2 h-4 w-4" />Bekijk losse mails</Button>
-                  <Button className="w-full rounded-2xl" variant="outline" onClick={() => setBatch([])} disabled={isSending || batch.length === 0}><Trash2 className="mr-2 h-4 w-4" />Batch leegmaken</Button>
-                  <p className="text-xs text-slate-500">In deze demo simuleert ‘Nu echt versturen’ de backend-verwerking. Er wordt geen echte mail verstuurd.</p>
+                  <Button className="w-full rounded-2xl" onClick={() => openPreview(false)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk batchmail</Button>
+                  <Button className="w-full rounded-2xl" variant="secondary" onClick={() => openPreview(true)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk losse mails</Button>
+                  <Button className="w-full rounded-2xl" variant="outline" onClick={clearBatch} disabled={isSending || batch.length === 0 || isBootLoading}><Trash2 className="mr-2 h-4 w-4" />Batch leegmaken</Button>
+                  <p className="text-xs text-slate-500">Ook batch leegmaken, verwijderen, bewerken en historie-opbouw lopen nu via Supabase.</p>
                 </CardContent>
               </Card>
             </div>
@@ -510,7 +797,7 @@ export default function DeclaratiesWebApp() {
               <CardContent className="space-y-6">
                 <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-900">
                   <AlertDescription>
-                    Dit is een demo. SMTP-velden blijven bewaard in lokale opslag, maar er wordt geen echte backend aangeroepen.
+                    Let op: deze versie schrijft SMTP-instellingen ook weg naar Supabase. Voor productie is dat alleen verantwoord met auth, RLS en idealiter secrets op de server.
                   </AlertDescription>
                 </Alert>
 
@@ -543,7 +830,10 @@ export default function DeclaratiesWebApp() {
                   <Switch checked={settings.sendIndividuallyByDefault} onCheckedChange={(checked) => setSettings({ ...settings, sendIndividuallyByDefault: checked })} />
                 </div>
 
-                <Button className="rounded-2xl" onClick={() => setMessage("Instellingen opgeslagen in lokale opslag van de browser.")}><Save className="mr-2 h-4 w-4" />Opslaan</Button>
+                <Button className="rounded-2xl" onClick={saveSettingsToSupabase} disabled={isSavingSettings || isBootLoading}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSavingSettings ? "Opslaan..." : "Opslaan"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -675,7 +965,7 @@ export default function DeclaratiesWebApp() {
                 setDialogError("");
                 setIsDialogOpen(false);
               }}>Annuleren</Button>
-              <Button onClick={saveDraft}>Opslaan</Button>
+              <Button onClick={saveDraft} disabled={isSavingDraft}>{isSavingDraft ? "Opslaan..." : "Opslaan"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
