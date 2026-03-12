@@ -13,6 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+
+function sanitizeAttachmentFilename(name) {
+  return String(name || "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
   Plus,
   Send,
   Trash2,
@@ -1470,7 +1478,6 @@ export default function DeclaratiesWebApp() {
                       <input
                         type="file"
                         accept="image/*,.pdf"
-                        capture="environment"
                         className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
                         key={draft.id}
                         onChange={(e) => {
