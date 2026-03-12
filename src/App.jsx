@@ -61,6 +61,44 @@ const blankDraft = () => ({
   updatedAt: new Date().toISOString(),
 });
 
+const mailPreviewCss = `
+.mail-preview-content,
+.mail-preview-content * {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.mail-preview-content table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.mail-preview-content thead,
+.mail-preview-content tbody,
+.mail-preview-content tr {
+  width: 100%;
+}
+
+.mail-preview-content th,
+.mail-preview-content td {
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.mail-preview-content img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.mail-preview-content p {
+  overflow-wrap: anywhere;
+}
+`;
+
 function euro(value) {
   const num = Number(String(value).replace(",", ".")) || 0;
   return new Intl.NumberFormat("nl-NL", {
@@ -835,7 +873,7 @@ export default function DeclaratiesWebApp() {
                   <CardTitle>Acties</CardTitle>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 min-w-0">
                   <div className="rounded-3xl bg-slate-100/90 p-4">
                     <div className="text-sm text-slate-500">Aantal declaraties</div>
                     <div className="mt-1 text-3xl font-semibold">{batch.length}</div>
@@ -1160,7 +1198,7 @@ export default function DeclaratiesWebApp() {
 
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-40 sm:px-6 sm:py-6 sm:pb-32">
                 <div className="space-y-6">
-                  <div className="grid gap-4 rounded-3xl border bg-slate-50 p-4 md:grid-cols-3">
+                  <div className="hidden gap-4 rounded-3xl border bg-slate-50 p-4 md:grid-cols-3 sm:grid">
                     <Field label={`Zoom (${previewUi.zoom}%)`}>
                       <Input
                         className="h-11 rounded-2xl"
@@ -1212,7 +1250,7 @@ export default function DeclaratiesWebApp() {
                       return (
                         <Card
                           key={groupIndex}
-                          className="rounded-[28px] border border-slate-200 shadow-none"
+                          className="overflow-hidden rounded-[28px] border border-slate-200 shadow-none"
                         >
                           <CardHeader>
                             <CardTitle className="text-lg">
@@ -1221,7 +1259,7 @@ export default function DeclaratiesWebApp() {
                           </CardHeader>
 
                           <CardContent className="space-y-4">
-                            <div className="grid gap-3 md:grid-cols-3">
+                            <div className="grid min-w-0 gap-3 md:grid-cols-3">
                               <div className="rounded-3xl bg-slate-50 p-3">
                                 <div className="text-xs uppercase tracking-wide text-slate-500">Aan</div>
                                 <div className="mt-1 break-all font-medium">{settings.toEmail || "-"}</div>
@@ -1234,36 +1272,35 @@ export default function DeclaratiesWebApp() {
                                 <div className="text-xs uppercase tracking-wide text-slate-500">
                                   Onderwerp
                                 </div>
-                                <div className="mt-1 font-medium">{emailData.subject}</div>
+                                <div className="mt-1 break-words font-medium">{emailData.subject}</div>
                               </div>
                             </div>
 
-                            <div className="rounded-3xl border bg-white p-4">
-                              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600">
-                                <Mail className="h-4 w-4" />
-                                Voorbeeld van de mail
+                            <div className="overflow-hidden rounded-3xl border bg-white p-4">
+                              <div className="mb-3 flex min-w-0 items-center gap-2 text-sm font-medium text-slate-600">
+                                <Mail className="h-4 w-4 shrink-0" />
+                                <span className="min-w-0 truncate">Voorbeeld van de mail</span>
                               </div>
 
-                              <div className="-mx-4 overflow-x-hidden rounded-none border-y bg-slate-100 px-0 py-3 sm:mx-0 sm:overflow-auto sm:rounded-2xl sm:border sm:px-4 sm:py-4">
+                              <div className="-mx-4 overflow-x-hidden rounded-none border-y bg-slate-100 px-0 py-3 sm:mx-0 sm:rounded-2xl sm:border sm:px-4 sm:py-4">
                                 <div
-                                  className="w-full sm:w-auto"
+                                  className="w-full overflow-x-hidden"
                                   style={{
                                     width: "100%",
                                     minHeight: `${previewUi.height}px`,
-                                    transform: "none",
-                                    transformOrigin: "top left",
                                   }}
                                 >
                                   <div
-                                    className="bg-white px-4 py-6 shadow-sm sm:p-6"
+                                    className="w-full overflow-hidden bg-white px-4 py-6 shadow-sm sm:p-6"
                                     style={{
                                       width: "100%",
                                       minHeight: `${previewUi.height}px`,
                                       maxWidth: "100%",
                                     }}
                                   >
+                                    <style>{mailPreviewCss}</style>
                                     <div
-                                      className="prose prose-sm max-w-none break-words"
+                                      className="mail-preview-content prose prose-sm max-w-none break-words [overflow-wrap:anywhere]"
                                       dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
                                     />
                                   </div>
@@ -1307,26 +1344,28 @@ export default function DeclaratiesWebApp() {
                 </div>
               </div>
 
-              <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
-                <DialogFooter className="w-full flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="shrink-0 overflow-hidden border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+                <DialogFooter className="grid w-full grid-cols-1 gap-2 sm:flex sm:justify-end">
                   <Button
                     variant="outline"
-                    className="h-11 w-full rounded-2xl sm:w-auto sm:min-w-[140px]"
+                    className="h-11 w-full justify-center rounded-2xl px-4 text-center sm:w-auto sm:min-w-[140px]"
                     onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
                   >
-                    Sluiten
+                    <span className="block w-full truncate text-center">Sluiten</span>
                   </Button>
 
                   <Button
-                    className="h-11 w-full rounded-2xl sm:w-auto sm:min-w-[140px]"
+                    className="h-11 w-full justify-center rounded-2xl px-4 text-center sm:w-auto sm:min-w-[180px]"
                     onClick={async () => {
                       setPreviewState((prev) => ({ ...prev, open: false }));
                       await sendBatch(previewState.sendIndividually);
                     }}
                     disabled={isSending}
                   >
-                    <Send className="mr-2 h-4 w-4" />
-                    Nu echt versturen
+                    <span className="inline-flex max-w-full items-center justify-center gap-2">
+                      <Send className="h-4 w-4 shrink-0" />
+                      <span className="truncate">Nu echt versturen</span>
+                    </span>
                   </Button>
                 </DialogFooter>
               </div>
