@@ -80,6 +80,13 @@ function compactDate(dateValue) {
   return String(dateValue || "").replace(/-/g, "");
 }
 
+function formatDateNl(dateValue) {
+  if (!dateValue) return "-";
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return dateValue;
+  return d.toLocaleDateString("nl-NL");
+}
+
 function detailText(d) {
   const bits = [];
   if (d.note) bits.push(d.note);
@@ -320,6 +327,36 @@ function mapDeclarationToDb(draft) {
   };
 }
 
+function SegmentedTabs({ tab, setTab }) {
+  return (
+    <Tabs value={tab} onValueChange={setTab} className="space-y-5 md:space-y-6">
+      <TabsList className="grid h-auto w-full grid-cols-3 rounded-[22px] border border-slate-200 bg-white/80 p-1 shadow-sm backdrop-blur">
+        <TabsTrigger
+          value="declaraties"
+          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+        >
+          <Receipt className="mr-1.5 h-4 w-4" />
+          Declaraties
+        </TabsTrigger>
+        <TabsTrigger
+          value="historie"
+          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+        >
+          <History className="mr-1.5 h-4 w-4" />
+          Historie
+        </TabsTrigger>
+        <TabsTrigger
+          value="settings"
+          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+        >
+          <Settings className="mr-1.5 h-4 w-4" />
+          Settings
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
 export default function DeclaratiesWebApp() {
   const [tab, setTab] = useState("declaraties");
   const [batch, setBatch] = useState([]);
@@ -447,10 +484,13 @@ export default function DeclaratiesWebApp() {
     );
     const filePath = `receipts/${declaration.id}-${cleanFileName}`;
 
-    const { error: uploadError } = await supabase.storage.from(RECEIPTS_BUCKET).upload(filePath, file, {
-      upsert: true,
-      contentType: file.type || "application/octet-stream",
-    });
+    const { error: uploadError } = await supabase.storage
+      .from(RECEIPTS_BUCKET)
+      .upload(filePath, file, {
+        upsert: true,
+        contentType: file.type || "application/octet-stream",
+      });
+
     if (uploadError) throw uploadError;
 
     const { data: publicUrlData } = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(filePath);
@@ -485,26 +525,31 @@ export default function DeclaratiesWebApp() {
 
   async function saveDraft() {
     setDialogError("");
+
     if (!draft.date || !draft.amount || !draft.supplier || !draft.reason) {
       setDialogError("Vul datum, bedrag, leverancier en reden in.");
       return;
     }
+
     const normalizedAmount = Number(String(draft.amount).replace(",", "."));
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
       setDialogError("Vul een geldig bedrag in, bijvoorbeeld 12,50.");
       return;
     }
+
     const hasExistingAttachment = Boolean(draft.attachment || draft.attachmentName);
     if (!hasExistingAttachment && draft.hasReceipt) {
       setDialogError("Voeg een foto of bestand van de bon toe.");
       return;
     }
+
     if (!draft.hasReceipt && !draft.noReceiptReason) {
       setDialogError("Vul een reden in als er geen bon aanwezig is.");
       return;
     }
 
     setIsSavingDraft(true);
+
     try {
       const previousVersion = editingId ? batch.find((x) => x.id === editingId) : null;
       const attachmentMeta = await uploadAttachment(draft.attachment, draft);
@@ -532,11 +577,17 @@ export default function DeclaratiesWebApp() {
       if (error) throw error;
 
       setBatch((prev) => {
-        const next = editingId ? prev.map((x) => (x.id === editingId ? normalized : x)) : [...prev, normalized];
+        const next = editingId
+          ? prev.map((x) => (x.id === editingId ? normalized : x))
+          : [...prev, normalized];
         return next.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
       });
 
-      setMessage(editingId ? "Declaratie bijgewerkt in Supabase." : "Declaratie toegevoegd aan de batch in Supabase.");
+      setMessage(
+        editingId
+          ? "Declaratie bijgewerkt in Supabase."
+          : "Declaratie toegevoegd aan de batch in Supabase."
+      );
       setDialogError("");
       setIsDialogOpen(false);
       setDraft(blankDraft());
@@ -584,6 +635,7 @@ export default function DeclaratiesWebApp() {
       setMessage("Voeg eerst minimaal één declaratie toe.");
       return;
     }
+
     const groups = sendIndividually ? batch.map((d) => [d]) : [batch];
     setPreviewState({ open: true, groups, sendIndividually });
     setMessage("");
@@ -630,6 +682,7 @@ export default function DeclaratiesWebApp() {
 
   async function sendGroupToEdgeFunction(group) {
     const emailData = buildEmailData(group, settings);
+
     const attachments = group
       .filter((item) => item.attachmentName && (item.attachmentPublicUrl || item.attachmentPath))
       .map((item, index) => ({
@@ -655,6 +708,7 @@ export default function DeclaratiesWebApp() {
     });
 
     const data = await response.json().catch(() => ({}));
+
     if (!response.ok || data?.success === false) {
       throw new Error(data?.error || data?.message || "Mail verzenden mislukt.");
     }
@@ -668,6 +722,7 @@ export default function DeclaratiesWebApp() {
       setMessage("Vul eerst het van- en naaradres in op de instellingenpagina.");
       return;
     }
+
     if (!batch.length) {
       setMessage("Voeg eerst minimaal één declaratie toe.");
       return;
@@ -691,7 +746,10 @@ export default function DeclaratiesWebApp() {
       }
 
       if (sentIds.length) {
-        const { error: deleteError } = await supabase.from("declarations").delete().in("id", sentIds);
+        const { error: deleteError } = await supabase
+          .from("declarations")
+          .delete()
+          .in("id", sentIds);
         if (deleteError) throw deleteError;
       }
 
@@ -702,7 +760,9 @@ export default function DeclaratiesWebApp() {
       setHistory((prev) => [...historyEntries, ...prev]);
       setBatch((prev) => prev.filter((item) => !sentIds.includes(item.id)));
       setTab("declaraties");
-      setMessage(`Mail${groups.length > 1 ? "s" : ""} verzonden, historie opgeslagen en batch bijgewerkt.`);
+      setMessage(
+        `Mail${groups.length > 1 ? "s" : ""} verzonden, historie opgeslagen en batch bijgewerkt.`
+      );
     } catch (err) {
       console.error(err);
       setMessage(`Verzenden mislukt: ${err.message}`);
@@ -720,120 +780,277 @@ export default function DeclaratiesWebApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Declaraties webapp</h1>
-            <p className="text-sm text-slate-600">
-              Alle batch-, historie-, settings- en bondata worden uit Supabase geladen en daarin opgeslagen.
-            </p>
-          </div>
+    <div className="min-h-screen bg-transparent px-3 pb-6 pt-[max(12px,env(safe-area-inset-top))] md:px-6 md:pb-8">
+      <div className="mx-auto w-full max-w-6xl space-y-4 md:space-y-6">
+        <div className="rounded-[28px] border border-white/60 bg-white/75 p-4 shadow-sm backdrop-blur md:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                Declaraties
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                Declaraties webapp
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Alle batch-, historie-, settings- en bondata worden uit Supabase geladen en daarin opgeslagen.
+              </p>
+            </div>
 
-          <Button onClick={openNewDialog} className="rounded-2xl" disabled={isBootLoading}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nieuwe declaratie
-          </Button>
+            <Button
+              onClick={openNewDialog}
+              className="h-11 w-full rounded-2xl px-4 text-[15px] font-semibold shadow-sm sm:w-auto"
+              disabled={isBootLoading}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nieuwe declaratie
+            </Button>
+          </div>
         </div>
 
         {message && (
-          <Alert className="rounded-2xl">
+          <Alert className="rounded-[24px] border-white/70 bg-white/80 shadow-sm">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
 
         {isBootLoading && (
-          <Alert className="rounded-2xl border-blue-200 bg-blue-50 text-blue-900">
+          <Alert className="rounded-[24px] border-blue-200 bg-blue-50 text-blue-900 shadow-sm">
             <AlertDescription>Gegevens worden geladen uit Supabase...</AlertDescription>
           </Alert>
         )}
 
-        <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
-            <TabsTrigger value="declaraties"><Receipt className="mr-2 h-4 w-4" />Declaraties</TabsTrigger>
-            <TabsTrigger value="historie"><History className="mr-2 h-4 w-4" />Historie</TabsTrigger>
-            <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4" />Settings</TabsTrigger>
+        <Tabs value={tab} onValueChange={setTab} className="space-y-5 md:space-y-6">
+          <TabsList className="grid h-auto w-full grid-cols-3 rounded-[22px] border border-slate-200 bg-white/80 p-1 shadow-sm backdrop-blur">
+            <TabsTrigger
+              value="declaraties"
+              className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+            >
+              <Receipt className="mr-1.5 h-4 w-4" />
+              Declaraties
+            </TabsTrigger>
+            <TabsTrigger
+              value="historie"
+              className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+            >
+              <History className="mr-1.5 h-4 w-4" />
+              Historie
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
+            >
+              <Settings className="mr-1.5 h-4 w-4" />
+              Settings
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="declaraties" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader><CardTitle>Huidige batch</CardTitle></CardHeader>
+          <TabsContent value="declaraties" className="space-y-5 md:space-y-6">
+            <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+              <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
+                <CardHeader className="pb-3">
+                  <CardTitle>Huidige batch</CardTitle>
+                </CardHeader>
+
                 <CardContent className="space-y-4">
                   {batch.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">Nog geen declaraties toegevoegd.</div>
-                  ) : (
-                    <div className="overflow-hidden rounded-2xl border bg-white">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Nr</TableHead>
-                            <TableHead>Datum</TableHead>
-                            <TableHead>Leverancier</TableHead>
-                            <TableHead>Reden</TableHead>
-                            <TableHead>Bedrag</TableHead>
-                            <TableHead>Bon</TableHead>
-                            <TableHead>Acties</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {batch.map((item, idx) => (
-                            <TableRow key={item.id}>
-                              <TableCell>{idx + 1}</TableCell>
-                              <TableCell>{compactDate(item.date)}</TableCell>
-                              <TableCell>{item.supplier}</TableCell>
-                              <TableCell>{item.reason}</TableCell>
-                              <TableCell>{euro(item.amount)}</TableCell>
-                              <TableCell><Badge variant={item.hasReceipt ? "default" : "secondary"}>{item.hasReceipt ? "Ja" : "Nee"}</Badge></TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
-                                  <Button size="sm" variant="outline" onClick={() => openEditDialog(item)}><Pencil className="h-4 w-4" /></Button>
-                                  <Button size="sm" variant="outline" onClick={() => deleteDraft(item.id)}><Trash2 className="h-4 w-4" /></Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center text-sm text-slate-500">
+                      Nog geen declaraties toegevoegd.
                     </div>
+                  ) : (
+                    <>
+                      <div className="space-y-3 md:hidden">
+                        {batch.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
+                          >
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900">
+                                  {idx + 1}. {item.supplier}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {formatDateNl(item.date)}
+                                </div>
+                              </div>
+                              <Badge variant={item.hasReceipt ? "default" : "secondary"}>
+                                {item.hasReceipt ? "Bon" : "Geen bon"}
+                              </Badge>
+                            </div>
+
+                            <div className="space-y-2 text-sm">
+                              <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                                <span className="font-medium text-slate-500">Reden:</span>{" "}
+                                <span className="text-slate-900">{item.reason}</span>
+                              </div>
+                              <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                                <span className="font-medium text-slate-500">Bedrag:</span>{" "}
+                                <span className="text-slate-900">{euro(item.amount)}</span>
+                              </div>
+                              {detailText(item) ? (
+                                <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                                  <span className="font-medium text-slate-500">Opmerking:</span>{" "}
+                                  <span className="text-slate-900">{detailText(item)}</span>
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 rounded-2xl"
+                                onClick={() => openEditDialog(item)}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Bewerk
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 rounded-2xl"
+                                onClick={() => deleteDraft(item.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Verwijder
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="hidden overflow-hidden rounded-3xl border bg-white md:block">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Nr</TableHead>
+                              <TableHead>Datum</TableHead>
+                              <TableHead>Leverancier</TableHead>
+                              <TableHead>Reden</TableHead>
+                              <TableHead>Bedrag</TableHead>
+                              <TableHead>Bon</TableHead>
+                              <TableHead>Acties</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {batch.map((item, idx) => (
+                              <TableRow key={item.id}>
+                                <TableCell>{idx + 1}</TableCell>
+                                <TableCell>{compactDate(item.date)}</TableCell>
+                                <TableCell>{item.supplier}</TableCell>
+                                <TableCell>{item.reason}</TableCell>
+                                <TableCell>{euro(item.amount)}</TableCell>
+                                <TableCell>
+                                  <Badge variant={item.hasReceipt ? "default" : "secondary"}>
+                                    {item.hasReceipt ? "Ja" : "Nee"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => openEditDialog(item)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => deleteDraft(item.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl shadow-sm">
-                <CardHeader><CardTitle>Acties</CardTitle></CardHeader>
+              <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
+                <CardHeader className="pb-3">
+                  <CardTitle>Acties</CardTitle>
+                </CardHeader>
+
                 <CardContent className="space-y-4">
-                  <div className="rounded-2xl bg-slate-100 p-4">
+                  <div className="rounded-3xl bg-slate-100/90 p-4">
                     <div className="text-sm text-slate-500">Aantal declaraties</div>
-                    <div className="text-2xl font-semibold">{batch.length}</div>
+                    <div className="mt-1 text-3xl font-semibold">{batch.length}</div>
                   </div>
-                  <div className="rounded-2xl bg-slate-100 p-4">
+
+                  <div className="rounded-3xl bg-slate-100/90 p-4">
                     <div className="text-sm text-slate-500">Totaalbedrag</div>
-                    <div className="text-2xl font-semibold">{euro(total)}</div>
+                    <div className="mt-1 text-3xl font-semibold">{euro(total)}</div>
                   </div>
+
                   <Separator />
-                  <Button className="w-full rounded-2xl" onClick={() => openPreview(false)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk batchmail</Button>
-                  <Button className="w-full rounded-2xl" variant="secondary" onClick={() => openPreview(true)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk losse mails</Button>
-                  <Button className="w-full rounded-2xl" variant="outline" onClick={clearBatch} disabled={isSending || batch.length === 0 || isBootLoading}><Trash2 className="mr-2 h-4 w-4" />Batch leegmaken</Button>
-                  <p className="text-xs text-slate-500">Verzenden loopt via Supabase Edge Function + Resend. Bonnen gaan als bijlage mee.</p>
+
+                  <Button
+                    className="h-11 w-full rounded-2xl"
+                    onClick={() => openPreview(false)}
+                    disabled={isSending || batch.length === 0 || isBootLoading}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Bekijk batchmail
+                  </Button>
+
+                  <Button
+                    className="h-11 w-full rounded-2xl"
+                    variant="secondary"
+                    onClick={() => openPreview(true)}
+                    disabled={isSending || batch.length === 0 || isBootLoading}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Bekijk losse mails
+                  </Button>
+
+                  <Button
+                    className="h-11 w-full rounded-2xl"
+                    variant="outline"
+                    onClick={clearBatch}
+                    disabled={isSending || batch.length === 0 || isBootLoading}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Batch leegmaken
+                  </Button>
+
+                  <p className="text-xs leading-5 text-slate-500">
+                    Verzenden loopt via Supabase Edge Function + Resend. Bonnen gaan als bijlage mee.
+                  </p>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="historie">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle>Historie</CardTitle></CardHeader>
+            <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
+              <CardHeader className="pb-3">
+                <CardTitle>Historie</CardTitle>
+              </CardHeader>
+
               <CardContent className="space-y-4">
                 {history.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">Nog geen verzonden batches.</div>
+                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center text-sm text-slate-500">
+                    Nog geen verzonden batches.
+                  </div>
                 ) : (
                   history.map((entry) => (
-                    <div key={entry.id} className="rounded-2xl border p-4">
+                    <div
+                      key={entry.id}
+                      className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
                       <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="font-medium">{entry.subject}</div>
-                          <div className="text-sm text-slate-500">{new Date(entry.sentAt).toLocaleString("nl-NL")} • {entry.mode}</div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900">{entry.subject}</div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            {new Date(entry.sentAt).toLocaleString("nl-NL")} • {entry.mode}
+                          </div>
                         </div>
                         <Badge>{entry.declarations.length} declaratie(s)</Badge>
                       </div>
@@ -845,38 +1062,94 @@ export default function DeclaratiesWebApp() {
           </TabsContent>
 
           <TabsContent value="settings">
-            <Card className="rounded-3xl shadow-sm">
-              <CardHeader><CardTitle>Settings</CardTitle></CardHeader>
+            <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
+              <CardHeader className="pb-3">
+                <CardTitle>Settings</CardTitle>
+              </CardHeader>
+
               <CardContent className="space-y-6">
-                <Alert className="rounded-2xl border-blue-200 bg-blue-50 text-blue-900">
+                <Alert className="rounded-3xl border-blue-200 bg-blue-50 text-blue-900">
                   <AlertDescription>
                     Deze versie gebruikt je Supabase Edge Function voor verzending. SMTP-velden zijn niet meer nodig; alleen afzender, ontvanger en declaratiegegevens.
                   </AlertDescription>
                 </Alert>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Van e-mailadres"><Input value={settings.fromEmail} onChange={(e) => setSettings({ ...settings, fromEmail: e.target.value })} /></Field>
-                  <Field label="Van naam"><Input value={settings.fromName} onChange={(e) => setSettings({ ...settings, fromName: e.target.value })} /></Field>
-                  <Field label="Naar e-mailadres"><Input value={settings.toEmail} onChange={(e) => setSettings({ ...settings, toEmail: e.target.value })} /></Field>
-                  <Field label="IBAN"><Input value={settings.iban} onChange={(e) => setSettings({ ...settings, iban: e.target.value })} /></Field>
-                  <Field label="Rekeninghouder"><Input value={settings.accountName} onChange={(e) => setSettings({ ...settings, accountName: e.target.value })} /></Field>
-                  <Field label="Naam ondertekening"><Input value={settings.signatureName} onChange={(e) => setSettings({ ...settings, signatureName: e.target.value })} /></Field>
+                  <Field label="Van e-mailadres">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.fromEmail}
+                      onChange={(e) => setSettings({ ...settings, fromEmail: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="Van naam">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.fromName}
+                      onChange={(e) => setSettings({ ...settings, fromName: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="Naar e-mailadres">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.toEmail}
+                      onChange={(e) => setSettings({ ...settings, toEmail: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="IBAN">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.iban}
+                      onChange={(e) => setSettings({ ...settings, iban: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="Rekeninghouder">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.accountName}
+                      onChange={(e) => setSettings({ ...settings, accountName: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="Naam ondertekening">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={settings.signatureName}
+                      onChange={(e) => setSettings({ ...settings, signatureName: e.target.value })}
+                    />
+                  </Field>
                 </div>
 
-                <div className="flex items-center justify-between rounded-2xl border p-4">
+                <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="font-medium">Standaard los versturen</div>
-                    <div className="text-sm text-slate-500">Als dit aan staat, wordt elke declaratie in een aparte mail voorbereid.</div>
+                    <div className="font-medium text-slate-900">Standaard los versturen</div>
+                    <div className="text-sm text-slate-500">
+                      Als dit aan staat, wordt elke declaratie in een aparte mail voorbereid.
+                    </div>
                   </div>
-                  <Switch checked={settings.sendIndividuallyByDefault} onCheckedChange={(checked) => setSettings({ ...settings, sendIndividuallyByDefault: checked })} />
+                  <Switch
+                    checked={settings.sendIndividuallyByDefault}
+                    onCheckedChange={(checked) =>
+                      setSettings({ ...settings, sendIndividuallyByDefault: checked })
+                    }
+                  />
                 </div>
 
-                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="rounded-3xl border bg-slate-50 p-4 text-sm text-slate-600">
                   <div className="font-medium text-slate-900">Endpoint</div>
-                  <div className="break-all">{SEND_DECLARATION_ENDPOINT}</div>
+                  <div className="mt-1 break-all">{SEND_DECLARATION_ENDPOINT}</div>
                 </div>
 
-                <Button type="button" className="rounded-2xl" onClick={saveSettingsToSupabase} disabled={isSavingSettings || isBootLoading}>
+                <Button
+                  type="button"
+                  className="h-11 rounded-2xl px-5"
+                  onClick={saveSettingsToSupabase}
+                  disabled={isSavingSettings || isBootLoading}
+                >
                   <Save className="mr-2 h-4 w-4" />
                   {isSavingSettings ? "Opslaan..." : "Opslaan"}
                 </Button>
@@ -885,19 +1158,56 @@ export default function DeclaratiesWebApp() {
           </TabsContent>
         </Tabs>
 
-        <Dialog open={previewState.open} onOpenChange={(open) => setPreviewState((prev) => ({ ...prev, open }))}>
-          <DialogContent className="max-w-[95vw] max-h-[96vh] overflow-y-auto rounded-3xl">
-            <DialogHeader><DialogTitle>Conceptmail bekijken</DialogTitle></DialogHeader>
+        <Dialog
+          open={previewState.open}
+          onOpenChange={(open) => setPreviewState((prev) => ({ ...prev, open }))}
+        >
+          <DialogContent className="h-[92vh] w-[calc(100vw-12px)] max-w-[98vw] overflow-y-auto rounded-[28px] p-4 sm:max-h-[96vh] sm:w-full sm:max-w-[95vw] sm:p-6">
+            <DialogHeader>
+              <DialogTitle>Conceptmail bekijken</DialogTitle>
+            </DialogHeader>
 
-            <div className="grid gap-4 rounded-2xl border bg-slate-50 p-4 md:grid-cols-3">
+            <div className="grid gap-4 rounded-3xl border bg-slate-50 p-4 md:grid-cols-3">
               <Field label={`Zoom (${previewUi.zoom}%)`}>
-                <Input type="range" min="60" max="150" step="5" value={previewUi.zoom} onChange={(e) => setPreviewUi((prev) => ({ ...prev, zoom: Number(e.target.value) }))} />
+                <Input
+                  className="h-11 rounded-2xl"
+                  type="range"
+                  min="60"
+                  max="150"
+                  step="5"
+                  value={previewUi.zoom}
+                  onChange={(e) =>
+                    setPreviewUi((prev) => ({ ...prev, zoom: Number(e.target.value) }))
+                  }
+                />
               </Field>
+
               <Field label={`Breedte (${previewUi.width}px)`}>
-                <Input type="range" min="700" max="1400" step="20" value={previewUi.width} onChange={(e) => setPreviewUi((prev) => ({ ...prev, width: Number(e.target.value) }))} />
+                <Input
+                  className="h-11 rounded-2xl"
+                  type="range"
+                  min="700"
+                  max="1400"
+                  step="20"
+                  value={previewUi.width}
+                  onChange={(e) =>
+                    setPreviewUi((prev) => ({ ...prev, width: Number(e.target.value) }))
+                  }
+                />
               </Field>
+
               <Field label={`Hoogte (${previewUi.height}px)`}>
-                <Input type="range" min="400" max="1000" step="20" value={previewUi.height} onChange={(e) => setPreviewUi((prev) => ({ ...prev, height: Number(e.target.value) }))} />
+                <Input
+                  className="h-11 rounded-2xl"
+                  type="range"
+                  min="400"
+                  max="1000"
+                  step="20"
+                  value={previewUi.height}
+                  onChange={(e) =>
+                    setPreviewUi((prev) => ({ ...prev, height: Number(e.target.value) }))
+                  }
+                />
               </Field>
             </div>
 
@@ -905,41 +1215,92 @@ export default function DeclaratiesWebApp() {
               {previewState.groups.map((group, groupIndex) => {
                 const emailData = buildEmailData(group, settings);
                 const totalAttachments = group.filter((d) => d.attachmentName).length;
+
                 return (
-                  <Card key={groupIndex} className="rounded-3xl border shadow-none">
+                  <Card
+                    key={groupIndex}
+                    className="rounded-[28px] border border-slate-200 shadow-none"
+                  >
                     <CardHeader>
-                      <CardTitle className="text-lg">{previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}</CardTitle>
+                      <CardTitle className="text-lg">
+                        {previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}
+                      </CardTitle>
                     </CardHeader>
+
                     <CardContent className="space-y-4">
                       <div className="grid gap-3 md:grid-cols-3">
-                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Aan</div><div className="font-medium break-all">{settings.toEmail || "-"}</div></div>
-                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Van</div><div className="font-medium break-all">{settings.fromEmail || "-"}</div></div>
-                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Onderwerp</div><div className="font-medium">{emailData.subject}</div></div>
+                        <div className="rounded-3xl bg-slate-50 p-3">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Aan</div>
+                          <div className="mt-1 break-all font-medium">{settings.toEmail || "-"}</div>
+                        </div>
+                        <div className="rounded-3xl bg-slate-50 p-3">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">Van</div>
+                          <div className="mt-1 break-all font-medium">{settings.fromEmail || "-"}</div>
+                        </div>
+                        <div className="rounded-3xl bg-slate-50 p-3">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">
+                            Onderwerp
+                          </div>
+                          <div className="mt-1 font-medium">{emailData.subject}</div>
+                        </div>
                       </div>
 
-                      <div className="rounded-2xl border bg-white p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600"><Mail className="h-4 w-4" />Voorbeeld van de mail</div>
-                        <div className="overflow-auto rounded-xl border bg-slate-100 p-4">
-                          <div style={{ width: `${previewUi.width}px`, minHeight: `${previewUi.height}px`, transform: `scale(${previewUi.zoom / 100})`, transformOrigin: "top left" }}>
-                            <div className="bg-white p-6 shadow-sm" style={{ width: `${previewUi.width}px`, minHeight: `${previewUi.height}px` }}>
-                              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: emailData.htmlBody }} />
+                      <div className="rounded-3xl border bg-white p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600">
+                          <Mail className="h-4 w-4" />
+                          Voorbeeld van de mail
+                        </div>
+
+                        <div className="overflow-auto rounded-2xl border bg-slate-100 p-3 sm:p-4">
+                          <div
+                            style={{
+                              width: `${previewUi.width}px`,
+                              minHeight: `${previewUi.height}px`,
+                              transform: `scale(${previewUi.zoom / 100})`,
+                              transformOrigin: "top left",
+                            }}
+                          >
+                            <div
+                              className="bg-white p-6 shadow-sm"
+                              style={{
+                                width: `${previewUi.width}px`,
+                                minHeight: `${previewUi.height}px`,
+                              }}
+                            >
+                              <div
+                                className="prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border bg-slate-50 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700"><Paperclip className="h-4 w-4" />Bijlagen ({totalAttachments})</div>
+                      <div className="rounded-3xl border bg-slate-50 p-4">
+                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+                          <Paperclip className="h-4 w-4" />
+                          Bijlagen ({totalAttachments})
+                        </div>
+
                         {totalAttachments === 0 ? (
                           <div className="text-sm text-slate-500">Geen bijlagen toegevoegd.</div>
                         ) : (
                           <div className="space-y-2">
-                            {group.map((item, idx) => item.attachmentName ? (
-                              <div key={item.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm gap-4">
-                                <div className="min-w-0 flex-1 truncate">{buildUniqueFileName(item, idx + 1, settings.signatureName)}</div>
-                                <Badge variant="secondary">{item.attachmentType || "bestand"}</Badge>
-                              </div>
-                            ) : null)}
+                            {group.map((item, idx) =>
+                              item.attachmentName ? (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2 text-sm"
+                                >
+                                  <div className="min-w-0 flex-1 truncate">
+                                    {buildUniqueFileName(item, idx + 1, settings.signatureName)}
+                                  </div>
+                                  <Badge variant="secondary">
+                                    {item.attachmentType || "bestand"}
+                                  </Badge>
+                                </div>
+                              ) : null
+                            )}
                           </div>
                         )}
                       </div>
@@ -949,58 +1310,171 @@ export default function DeclaratiesWebApp() {
               })}
             </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}>Sluiten</Button>
-              <Button onClick={async () => { setPreviewState((prev) => ({ ...prev, open: false })); await sendBatch(previewState.sendIndividually); }} disabled={isSending}>
-                <Send className="mr-2 h-4 w-4" />Nu echt versturen
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                className="h-11 rounded-2xl"
+                onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
+              >
+                Sluiten
+              </Button>
+
+              <Button
+                className="h-11 rounded-2xl"
+                onClick={async () => {
+                  setPreviewState((prev) => ({ ...prev, open: false }));
+                  await sendBatch(previewState.sendIndividually);
+                }}
+                disabled={isSending}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Nu echt versturen
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setDialogError(""); }}>
-          <DialogContent className="max-w-2xl rounded-3xl">
-            <DialogHeader><DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle></DialogHeader>
-            {dialogError && <Alert className="rounded-2xl border-red-200 bg-red-50 text-red-900"><AlertDescription>{dialogError}</AlertDescription></Alert>}
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) setDialogError("");
+          }}
+        >
+          <DialogContent className="w-[calc(100vw-12px)] max-w-2xl rounded-[28px] p-4 sm:w-full sm:p-6">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
+            </DialogHeader>
+
+            {dialogError && (
+              <Alert className="rounded-3xl border-red-200 bg-red-50 text-red-900">
+                <AlertDescription>{dialogError}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Datum"><Input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} /></Field>
-              <Field label="Bedrag (€)"><Input value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} placeholder="12,50" /></Field>
-              <Field label="Leverancier"><Input value={draft.supplier} onChange={(e) => setDraft({ ...draft, supplier: e.target.value })} /></Field>
-              <Field label="Reden"><Input value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} /></Field>
-              <div className="md:col-span-2 flex items-center justify-between rounded-2xl border p-4">
-                <div><div className="font-medium">Bon aanwezig</div><div className="text-sm text-slate-500">Zet uit als er geen bon is.</div></div>
-                <Switch checked={draft.hasReceipt} onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })} />
+              <Field label="Datum">
+                <Input
+                  className="h-11 rounded-2xl"
+                  type="date"
+                  value={draft.date}
+                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Bedrag (€)">
+                <Input
+                  className="h-11 rounded-2xl"
+                  value={draft.amount}
+                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                  placeholder="12,50"
+                />
+              </Field>
+
+              <Field label="Leverancier">
+                <Input
+                  className="h-11 rounded-2xl"
+                  value={draft.supplier}
+                  onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Reden">
+                <Input
+                  className="h-11 rounded-2xl"
+                  value={draft.reason}
+                  onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
+                />
+              </Field>
+
+              <div className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-medium text-slate-900">Bon aanwezig</div>
+                  <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
+                </div>
+                <Switch
+                  checked={draft.hasReceipt}
+                  onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
+                />
               </div>
+
               {!draft.hasReceipt && (
-                <div className="md:col-span-2"><Field label="Reden geen bon"><Input value={draft.noReceiptReason} onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })} /></Field></div>
+                <div className="md:col-span-2">
+                  <Field label="Reden geen bon">
+                    <Input
+                      className="h-11 rounded-2xl"
+                      value={draft.noReceiptReason}
+                      onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })}
+                    />
+                  </Field>
+                </div>
               )}
-              <div className="md:col-span-2"><Field label="Opmerking"><Textarea value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} rows={3} /></Field></div>
+
+              <div className="md:col-span-2">
+                <Field label="Opmerking">
+                  <Textarea
+                    className="rounded-2xl"
+                    value={draft.note}
+                    onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                    rows={3}
+                  />
+                </Field>
+              </div>
+
               <div className="md:col-span-2 space-y-2">
                 <Label>Foto of bestand van bon</Label>
-                <input type="file" accept="image/*,.pdf" capture="environment" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium" key={draft.id} onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setDialogError("");
-                  setDraft((prev) => {
-                    const nextAttachmentName = buildAttachmentFilenameFromFile(
-                      file,
-                      prev,
-                      settings.signatureName || prev.submitterName || "Jorgo"
-                    );
-                    return {
-                      ...prev,
-                      attachment: file,
-                      attachmentName: nextAttachmentName,
-                      attachmentType: file.type,
-                    };
-                  });
-                }} />
-                {draft.attachmentName && <div className="flex items-center gap-2 text-sm text-slate-500"><Upload className="h-4 w-4" />{draft.attachmentName}</div>}
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  capture="environment"
+                  className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                  key={draft.id}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    setDialogError("");
+                    setDraft((prev) => {
+                      const nextAttachmentName = buildAttachmentFilenameFromFile(
+                        file,
+                        prev,
+                        settings.signatureName || prev.submitterName || "Jorgo"
+                      );
+
+                      return {
+                        ...prev,
+                        attachment: file,
+                        attachmentName: nextAttachmentName,
+                        attachmentType: file.type,
+                      };
+                    });
+                  }}
+                />
+
+                {draft.attachmentName && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Upload className="h-4 w-4" />
+                    <span className="break-all">{draft.attachmentName}</span>
+                  </div>
+                )}
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setDialogError(""); setIsDialogOpen(false); }}>Annuleren</Button>
-              <Button onClick={saveDraft} disabled={isSavingDraft}>{isSavingDraft ? "Opslaan..." : "Opslaan"}</Button>
+
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                className="h-11 rounded-2xl"
+                onClick={() => {
+                  setDialogError("");
+                  setIsDialogOpen(false);
+                }}
+              >
+                Annuleren
+              </Button>
+
+              <Button className="h-11 rounded-2xl" onClick={saveDraft} disabled={isSavingDraft}>
+                {isSavingDraft ? "Opslaan..." : "Opslaan"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1011,8 +1485,8 @@ export default function DeclaratiesWebApp() {
 
 function Field({ label, children }) {
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
+    <div className="space-y-2.5">
+      <Label className="text-sm font-medium text-slate-700">{label}</Label>
       {children}
     </div>
   );
