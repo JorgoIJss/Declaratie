@@ -243,11 +243,23 @@ function buildEmailData(batch, settings) {
     })
     .join("\n");
 
-  const textBody = `Beste penningmeester,\n\nHierbij dien ik ${
+  const textBody = `Beste penningmeester,
+
+Hierbij dien ik ${
     batch.length === 1 ? "een declaratie" : `${batch.length} declaraties`
-  } in.\n\n${header}\n${separator}\n${textRows}\n\nTotaal batch: ${euro(total)}\n\nIBAN: ${
-    settings.iban
-  }\nTen name van: ${settings.accountName}\n\nMet vriendelijke groet,\n${settings.signatureName}`;
+  } in.
+
+${header}
+${separator}
+${textRows}
+
+Totaal batch: ${euro(total)}
+
+IBAN: ${settings.iban}
+Ten name van: ${settings.accountName}
+
+Met vriendelijke groet,
+${settings.signatureName}`;
 
   return {
     subject,
@@ -325,36 +337,6 @@ function mapDeclarationToDb(draft) {
     created_at: draft.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-}
-
-function SegmentedTabs({ tab, setTab }) {
-  return (
-    <Tabs value={tab} onValueChange={setTab} className="space-y-5 md:space-y-6">
-      <TabsList className="grid h-auto w-full grid-cols-3 rounded-[22px] border border-slate-200 bg-white/80 p-1 shadow-sm backdrop-blur">
-        <TabsTrigger
-          value="declaraties"
-          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
-        >
-          <Receipt className="mr-1.5 h-4 w-4" />
-          Declaraties
-        </TabsTrigger>
-        <TabsTrigger
-          value="historie"
-          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
-        >
-          <History className="mr-1.5 h-4 w-4" />
-          Historie
-        </TabsTrigger>
-        <TabsTrigger
-          value="settings"
-          className="rounded-2xl px-2 py-3 text-[11px] font-semibold sm:text-sm"
-        >
-          <Settings className="mr-1.5 h-4 w-4" />
-          Settings
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
-  );
 }
 
 export default function DeclaratiesWebApp() {
@@ -689,6 +671,8 @@ export default function DeclaratiesWebApp() {
         filename: buildUniqueFileName(item, index + 1, settings.signatureName),
         url: item.attachmentPublicUrl || null,
         path: item.attachmentPath || null,
+        attachmentPublicUrl: item.attachmentPublicUrl || null,
+        attachmentPath: item.attachmentPath || null,
         contentType: item.attachmentType || "application/octet-stream",
       }));
 
@@ -844,9 +828,66 @@ export default function DeclaratiesWebApp() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="declaraties" className="space-y-5 md:space-y-6">
-            <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-              <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
+          <TabsContent value="declaraties" className="space-y-4 md:space-y-6">
+            <div className="grid gap-4 md:gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+              <Card className="order-1 rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur lg:order-1">
+                <CardHeader className="pb-3">
+                  <CardTitle>Acties</CardTitle>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <div className="rounded-3xl bg-slate-100/90 p-4">
+                    <div className="text-sm text-slate-500">Aantal declaraties</div>
+                    <div className="mt-1 text-3xl font-semibold">{batch.length}</div>
+                  </div>
+
+                  <div className="rounded-3xl bg-slate-100/90 p-4">
+                    <div className="text-sm text-slate-500">Totaalbedrag</div>
+                    <div className="mt-1 text-3xl font-semibold">{euro(total)}</div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="sticky bottom-0 z-10 -mx-1 rounded-3xl bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                    <div className="space-y-2">
+                      <Button
+                        className="h-11 w-full rounded-2xl"
+                        onClick={() => openPreview(false)}
+                        disabled={isSending || batch.length === 0 || isBootLoading}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Bekijk batchmail
+                      </Button>
+
+                      <Button
+                        className="h-11 w-full rounded-2xl"
+                        variant="secondary"
+                        onClick={() => openPreview(true)}
+                        disabled={isSending || batch.length === 0 || isBootLoading}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Bekijk losse mails
+                      </Button>
+
+                      <Button
+                        className="h-11 w-full rounded-2xl"
+                        variant="outline"
+                        onClick={clearBatch}
+                        disabled={isSending || batch.length === 0 || isBootLoading}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Batch leegmaken
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs leading-5 text-slate-500">
+                    Verzenden loopt via Supabase Edge Function + Resend. Bonnen gaan als bijlage mee.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="order-2 rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur lg:order-2">
                 <CardHeader className="pb-3">
                   <CardTitle>Huidige batch</CardTitle>
                 </CardHeader>
@@ -970,59 +1011,6 @@ export default function DeclaratiesWebApp() {
                       </div>
                     </>
                   )}
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-[28px] border-white/70 bg-white/80 shadow-sm backdrop-blur">
-                <CardHeader className="pb-3">
-                  <CardTitle>Acties</CardTitle>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="rounded-3xl bg-slate-100/90 p-4">
-                    <div className="text-sm text-slate-500">Aantal declaraties</div>
-                    <div className="mt-1 text-3xl font-semibold">{batch.length}</div>
-                  </div>
-
-                  <div className="rounded-3xl bg-slate-100/90 p-4">
-                    <div className="text-sm text-slate-500">Totaalbedrag</div>
-                    <div className="mt-1 text-3xl font-semibold">{euro(total)}</div>
-                  </div>
-
-                  <Separator />
-
-                  <Button
-                    className="h-11 w-full rounded-2xl"
-                    onClick={() => openPreview(false)}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Bekijk batchmail
-                  </Button>
-
-                  <Button
-                    className="h-11 w-full rounded-2xl"
-                    variant="secondary"
-                    onClick={() => openPreview(true)}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Bekijk losse mails
-                  </Button>
-
-                  <Button
-                    className="h-11 w-full rounded-2xl"
-                    variant="outline"
-                    onClick={clearBatch}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Batch leegmaken
-                  </Button>
-
-                  <p className="text-xs leading-5 text-slate-500">
-                    Verzenden loopt via Supabase Edge Function + Resend. Bonnen gaan als bijlage mee.
-                  </p>
                 </CardContent>
               </Card>
             </div>
