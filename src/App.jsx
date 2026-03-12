@@ -1322,159 +1322,161 @@ export default function DeclaratiesWebApp() {
           </DialogContent>
         </Dialog>
 
-    <Dialog
+<Dialog
   open={isDialogOpen}
   onOpenChange={(open) => {
     setIsDialogOpen(open);
     if (!open) setDialogError("");
   }}
 >
-  <DialogContent className="flex h-[100dvh] w-full max-w-none flex-col gap-0 rounded-none border-0 p-0 sm:h-[92vh] sm:w-[calc(100vw-24px)] sm:max-w-2xl sm:rounded-[28px] sm:border sm:p-0">
-    <div className="flex items-center border-b bg-white/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-6">
-      <DialogHeader className="w-full text-left">
-        <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
-      </DialogHeader>
-    </div>
+  <DialogContent className="fixed inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:inset-1/2 sm:h-[92dvh] sm:w-[min(42rem,calc(100vw-24px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border">
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="shrink-0 border-b bg-white px-4 py-4 pt-[calc(16px+env(safe-area-inset-top))] sm:px-6 sm:pt-4">
+        <DialogHeader className="text-left">
+          <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
+        </DialogHeader>
+      </div>
 
-    <div className="flex-1 overflow-y-auto px-4 py-4 pb-28 sm:px-6 sm:py-6 sm:pb-32">
-      <div className="space-y-4">
-        {dialogError && (
-          <Alert className="rounded-3xl border-red-200 bg-red-50 text-red-900">
-            <AlertDescription>{dialogError}</AlertDescription>
-          </Alert>
-        )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-40 sm:px-6 sm:py-6 sm:pb-32">
+        <div className="space-y-4">
+          {dialogError && (
+            <Alert className="rounded-3xl border-red-200 bg-red-50 text-red-900">
+              <AlertDescription>{dialogError}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Datum">
-            <Input
-              className="h-11 rounded-2xl"
-              type="date"
-              value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-            />
-          </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Datum">
+              <Input
+                className="h-11 rounded-2xl"
+                type="date"
+                value={draft.date}
+                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+              />
+            </Field>
 
-          <Field label="Bedrag (€)">
-            <Input
-              className="h-11 rounded-2xl"
-              value={draft.amount}
-              onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-              placeholder="12,50"
-            />
-          </Field>
+            <Field label="Bedrag (€)">
+              <Input
+                className="h-11 rounded-2xl"
+                value={draft.amount}
+                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                placeholder="12,50"
+              />
+            </Field>
 
-          <Field label="Leverancier">
-            <Input
-              className="h-11 rounded-2xl"
-              value={draft.supplier}
-              onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
-            />
-          </Field>
+            <Field label="Leverancier">
+              <Input
+                className="h-11 rounded-2xl"
+                value={draft.supplier}
+                onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
+              />
+            </Field>
 
-          <Field label="Reden">
-            <Input
-              className="h-11 rounded-2xl"
-              value={draft.reason}
-              onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
-            />
-          </Field>
+            <Field label="Reden">
+              <Input
+                className="h-11 rounded-2xl"
+                value={draft.reason}
+                onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
+              />
+            </Field>
 
-          <div className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="font-medium text-slate-900">Bon aanwezig</div>
-              <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
+            <div className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-medium text-slate-900">Bon aanwezig</div>
+                <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
+              </div>
+              <Switch
+                checked={draft.hasReceipt}
+                onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
+              />
             </div>
-            <Switch
-              checked={draft.hasReceipt}
-              onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
-            />
-          </div>
 
-          {!draft.hasReceipt && (
+            {!draft.hasReceipt && (
+              <div className="md:col-span-2">
+                <Field label="Reden geen bon">
+                  <Input
+                    className="h-11 rounded-2xl"
+                    value={draft.noReceiptReason}
+                    onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })}
+                  />
+                </Field>
+              </div>
+            )}
+
             <div className="md:col-span-2">
-              <Field label="Reden geen bon">
-                <Input
-                  className="h-11 rounded-2xl"
-                  value={draft.noReceiptReason}
-                  onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })}
+              <Field label="Opmerking">
+                <Textarea
+                  className="rounded-2xl"
+                  value={draft.note}
+                  onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                  rows={3}
                 />
               </Field>
             </div>
-          )}
 
-          <div className="md:col-span-2">
-            <Field label="Opmerking">
-              <Textarea
-                className="rounded-2xl"
-                value={draft.note}
-                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                rows={3}
+            <div className="md:col-span-2 space-y-2">
+              <Label>Foto of bestand van bon</Label>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                capture="environment"
+                className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                key={draft.id}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  setDialogError("");
+                  setDraft((prev) => {
+                    const nextAttachmentName = buildAttachmentFilenameFromFile(
+                      file,
+                      prev,
+                      settings.signatureName || prev.submitterName || "Jorgo"
+                    );
+
+                    return {
+                      ...prev,
+                      attachment: file,
+                      attachmentName: nextAttachmentName,
+                      attachmentType: file.type,
+                    };
+                  });
+                }}
               />
-            </Field>
-          </div>
 
-          <div className="md:col-span-2 space-y-2">
-            <Label>Foto of bestand van bon</Label>
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              capture="environment"
-              className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
-              key={draft.id}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-
-                setDialogError("");
-                setDraft((prev) => {
-                  const nextAttachmentName = buildAttachmentFilenameFromFile(
-                    file,
-                    prev,
-                    settings.signatureName || prev.submitterName || "Jorgo"
-                  );
-
-                  return {
-                    ...prev,
-                    attachment: file,
-                    attachmentName: nextAttachmentName,
-                    attachmentType: file.type,
-                  };
-                });
-              }}
-            />
-
-            {draft.attachmentName && (
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <Upload className="h-4 w-4" />
-                <span className="break-all">{draft.attachmentName}</span>
-              </div>
-            )}
+              {draft.attachmentName && (
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Upload className="h-4 w-4" />
+                  <span className="break-all">{draft.attachmentName}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div className="sticky bottom-0 z-20 border-t bg-white/95 px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-6 sm:py-4">
-      <DialogFooter className="flex-col gap-2 sm:flex-row">
-        <Button
-          variant="outline"
-          className="h-11 rounded-2xl sm:min-w-[140px]"
-          onClick={() => {
-            setDialogError("");
-            setIsDialogOpen(false);
-          }}
-        >
-          Annuleren
-        </Button>
+      <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            variant="outline"
+            className="h-11 rounded-2xl sm:min-w-[140px]"
+            onClick={() => {
+              setDialogError("");
+              setIsDialogOpen(false);
+            }}
+          >
+            Annuleren
+          </Button>
 
-        <Button
-          className="h-11 rounded-2xl sm:min-w-[140px]"
-          onClick={saveDraft}
-          disabled={isSavingDraft}
-        >
-          {isSavingDraft ? "Opslaan..." : "Opslaan"}
-        </Button>
-      </DialogFooter>
+          <Button
+            className="h-11 rounded-2xl sm:min-w-[140px]"
+            onClick={saveDraft}
+            disabled={isSavingDraft}
+          >
+            {isSavingDraft ? "Opslaan..." : "Opslaan"}
+          </Button>
+        </DialogFooter>
+      </div>
     </div>
   </DialogContent>
 </Dialog>
