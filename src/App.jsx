@@ -1150,336 +1150,346 @@ export default function DeclaratiesWebApp() {
           open={previewState.open}
           onOpenChange={(open) => setPreviewState((prev) => ({ ...prev, open }))}
         >
-          <DialogContent className="h-[92vh] w-[calc(100vw-12px)] max-w-[98vw] overflow-y-auto rounded-[28px] p-4 sm:max-h-[96vh] sm:w-full sm:max-w-[95vw] sm:p-6">
-            <DialogHeader>
-              <DialogTitle>Conceptmail bekijken</DialogTitle>
-            </DialogHeader>
+          <DialogContent className="fixed inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:inset-1/2 sm:h-[92dvh] sm:w-[min(72rem,calc(100vw-24px))] sm:max-w-[95vw] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border">
+            <div className="flex h-full min-h-0 flex-col bg-white">
+              <div className="shrink-0 border-b bg-white px-4 py-4 pt-[calc(16px+env(safe-area-inset-top))] sm:px-6 sm:pt-4">
+                <DialogHeader className="text-left">
+                  <DialogTitle>Conceptmail bekijken</DialogTitle>
+                </DialogHeader>
+              </div>
 
-            <div className="grid gap-4 rounded-3xl border bg-slate-50 p-4 md:grid-cols-3">
-              <Field label={`Zoom (${previewUi.zoom}%)`}>
-                <Input
-                  className="h-11 rounded-2xl"
-                  type="range"
-                  min="60"
-                  max="150"
-                  step="5"
-                  value={previewUi.zoom}
-                  onChange={(e) =>
-                    setPreviewUi((prev) => ({ ...prev, zoom: Number(e.target.value) }))
-                  }
-                />
-              </Field>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-40 sm:px-6 sm:py-6 sm:pb-32">
+                <div className="space-y-6">
+                  <div className="grid gap-4 rounded-3xl border bg-slate-50 p-4 md:grid-cols-3">
+                    <Field label={`Zoom (${previewUi.zoom}%)`}>
+                      <Input
+                        className="h-11 rounded-2xl"
+                        type="range"
+                        min="60"
+                        max="150"
+                        step="5"
+                        value={previewUi.zoom}
+                        onChange={(e) =>
+                          setPreviewUi((prev) => ({ ...prev, zoom: Number(e.target.value) }))
+                        }
+                      />
+                    </Field>
 
-              <Field label={`Breedte (${previewUi.width}px)`}>
-                <Input
-                  className="h-11 rounded-2xl"
-                  type="range"
-                  min="700"
-                  max="1400"
-                  step="20"
-                  value={previewUi.width}
-                  onChange={(e) =>
-                    setPreviewUi((prev) => ({ ...prev, width: Number(e.target.value) }))
-                  }
-                />
-              </Field>
+                    <Field label={`Breedte (${previewUi.width}px)`}>
+                      <Input
+                        className="h-11 rounded-2xl"
+                        type="range"
+                        min="700"
+                        max="1400"
+                        step="20"
+                        value={previewUi.width}
+                        onChange={(e) =>
+                          setPreviewUi((prev) => ({ ...prev, width: Number(e.target.value) }))
+                        }
+                      />
+                    </Field>
 
-              <Field label={`Hoogte (${previewUi.height}px)`}>
-                <Input
-                  className="h-11 rounded-2xl"
-                  type="range"
-                  min="400"
-                  max="1000"
-                  step="20"
-                  value={previewUi.height}
-                  onChange={(e) =>
-                    setPreviewUi((prev) => ({ ...prev, height: Number(e.target.value) }))
-                  }
-                />
-              </Field>
-            </div>
+                    <Field label={`Hoogte (${previewUi.height}px)`}>
+                      <Input
+                        className="h-11 rounded-2xl"
+                        type="range"
+                        min="400"
+                        max="1000"
+                        step="20"
+                        value={previewUi.height}
+                        onChange={(e) =>
+                          setPreviewUi((prev) => ({ ...prev, height: Number(e.target.value) }))
+                        }
+                      />
+                    </Field>
+                  </div>
 
-            <div className="space-y-6">
-              {previewState.groups.map((group, groupIndex) => {
-                const emailData = buildEmailData(group, settings);
-                const totalAttachments = group.filter((d) => d.attachmentName).length;
+                  <div className="space-y-6">
+                    {previewState.groups.map((group, groupIndex) => {
+                      const emailData = buildEmailData(group, settings);
+                      const totalAttachments = group.filter((d) => d.attachmentName).length;
 
-                return (
-                  <Card
-                    key={groupIndex}
-                    className="rounded-[28px] border border-slate-200 shadow-none"
-                  >
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}
-                      </CardTitle>
-                    </CardHeader>
+                      return (
+                        <Card
+                          key={groupIndex}
+                          className="rounded-[28px] border border-slate-200 shadow-none"
+                        >
+                          <CardHeader>
+                            <CardTitle className="text-lg">
+                              {previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}
+                            </CardTitle>
+                          </CardHeader>
 
-                    <CardContent className="space-y-4">
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <div className="rounded-3xl bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">Aan</div>
-                          <div className="mt-1 break-all font-medium">{settings.toEmail || "-"}</div>
-                        </div>
-                        <div className="rounded-3xl bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">Van</div>
-                          <div className="mt-1 break-all font-medium">{settings.fromEmail || "-"}</div>
-                        </div>
-                        <div className="rounded-3xl bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">
-                            Onderwerp
-                          </div>
-                          <div className="mt-1 font-medium">{emailData.subject}</div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-3xl border bg-white p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600">
-                          <Mail className="h-4 w-4" />
-                          Voorbeeld van de mail
-                        </div>
-
-                        <div className="overflow-auto rounded-2xl border bg-slate-100 p-3 sm:p-4">
-                          <div
-                            style={{
-                              width: `${previewUi.width}px`,
-                              minHeight: `${previewUi.height}px`,
-                              transform: `scale(${previewUi.zoom / 100})`,
-                              transformOrigin: "top left",
-                            }}
-                          >
-                            <div
-                              className="bg-white p-6 shadow-sm"
-                              style={{
-                                width: `${previewUi.width}px`,
-                                minHeight: `${previewUi.height}px`,
-                              }}
-                            >
-                              <div
-                                className="prose prose-sm max-w-none"
-                                dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-3xl border bg-slate-50 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700">
-                          <Paperclip className="h-4 w-4" />
-                          Bijlagen ({totalAttachments})
-                        </div>
-
-                        {totalAttachments === 0 ? (
-                          <div className="text-sm text-slate-500">Geen bijlagen toegevoegd.</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {group.map((item, idx) =>
-                              item.attachmentName ? (
-                                <div
-                                  key={item.id}
-                                  className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2 text-sm"
-                                >
-                                  <div className="min-w-0 flex-1 truncate">
-                                    {buildUniqueFileName(item, idx + 1, settings.signatureName)}
-                                  </div>
-                                  <Badge variant="secondary">
-                                    {item.attachmentType || "bestand"}
-                                  </Badge>
+                          <CardContent className="space-y-4">
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="rounded-3xl bg-slate-50 p-3">
+                                <div className="text-xs uppercase tracking-wide text-slate-500">Aan</div>
+                                <div className="mt-1 break-all font-medium">{settings.toEmail || "-"}</div>
+                              </div>
+                              <div className="rounded-3xl bg-slate-50 p-3">
+                                <div className="text-xs uppercase tracking-wide text-slate-500">Van</div>
+                                <div className="mt-1 break-all font-medium">{settings.fromEmail || "-"}</div>
+                              </div>
+                              <div className="rounded-3xl bg-slate-50 p-3">
+                                <div className="text-xs uppercase tracking-wide text-slate-500">
+                                  Onderwerp
                                 </div>
-                              ) : null
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                                <div className="mt-1 font-medium">{emailData.subject}</div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-3xl border bg-white p-4">
+                              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600">
+                                <Mail className="h-4 w-4" />
+                                Voorbeeld van de mail
+                              </div>
+
+                              <div className="overflow-auto rounded-2xl border bg-slate-100 p-3 sm:p-4">
+                                <div
+                                  style={{
+                                    width: `${previewUi.width}px`,
+                                    minHeight: `${previewUi.height}px`,
+                                    transform: `scale(${previewUi.zoom / 100})`,
+                                    transformOrigin: "top left",
+                                  }}
+                                >
+                                  <div
+                                    className="bg-white p-6 shadow-sm"
+                                    style={{
+                                      width: `${previewUi.width}px`,
+                                      minHeight: `${previewUi.height}px`,
+                                    }}
+                                  >
+                                    <div
+                                      className="prose prose-sm max-w-none"
+                                      dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-3xl border bg-slate-50 p-4">
+                              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+                                <Paperclip className="h-4 w-4" />
+                                Bijlagen ({totalAttachments})
+                              </div>
+
+                              {totalAttachments === 0 ? (
+                                <div className="text-sm text-slate-500">Geen bijlagen toegevoegd.</div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {group.map((item, idx) =>
+                                    item.attachmentName ? (
+                                      <div
+                                        key={item.id}
+                                        className="flex items-center justify-between gap-4 rounded-2xl bg-white px-3 py-2 text-sm"
+                                      >
+                                        <div className="min-w-0 flex-1 truncate">
+                                          {buildUniqueFileName(item, idx + 1, settings.signatureName)}
+                                        </div>
+                                        <Badge variant="secondary">
+                                          {item.attachmentType || "bestand"}
+                                        </Badge>
+                                      </div>
+                                    ) : null
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+                <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
+                  >
+                    Sluiten
+                  </Button>
+
+                  <Button
+                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    onClick={async () => {
+                      setPreviewState((prev) => ({ ...prev, open: false }));
+                      await sendBatch(previewState.sendIndividually);
+                    }}
+                    disabled={isSending}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Nu echt versturen
+                  </Button>
+                </DialogFooter>
+              </div>
             </div>
-
-            <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                className="h-11 rounded-2xl"
-                onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
-              >
-                Sluiten
-              </Button>
-
-              <Button
-                className="h-11 rounded-2xl"
-                onClick={async () => {
-                  setPreviewState((prev) => ({ ...prev, open: false }));
-                  await sendBatch(previewState.sendIndividually);
-                }}
-                disabled={isSending}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Nu echt versturen
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
-<Dialog
-  open={isDialogOpen}
-  onOpenChange={(open) => {
-    setIsDialogOpen(open);
-    if (!open) setDialogError("");
-  }}
->
-  <DialogContent className="fixed inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:inset-1/2 sm:h-[92dvh] sm:w-[min(42rem,calc(100vw-24px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border">
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="shrink-0 border-b bg-white px-4 py-4 pt-[calc(16px+env(safe-area-inset-top))] sm:px-6 sm:pt-4">
-        <DialogHeader className="text-left">
-          <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
-        </DialogHeader>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-40 sm:px-6 sm:py-6 sm:pb-32">
-        <div className="space-y-4">
-          {dialogError && (
-            <Alert className="rounded-3xl border-red-200 bg-red-50 text-red-900">
-              <AlertDescription>{dialogError}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Datum">
-              <Input
-                className="h-11 rounded-2xl"
-                type="date"
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              />
-            </Field>
-
-            <Field label="Bedrag (€)">
-              <Input
-                className="h-11 rounded-2xl"
-                value={draft.amount}
-                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-                placeholder="12,50"
-              />
-            </Field>
-
-            <Field label="Leverancier">
-              <Input
-                className="h-11 rounded-2xl"
-                value={draft.supplier}
-                onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
-              />
-            </Field>
-
-            <Field label="Reden">
-              <Input
-                className="h-11 rounded-2xl"
-                value={draft.reason}
-                onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
-              />
-            </Field>
-
-            <div className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="font-medium text-slate-900">Bon aanwezig</div>
-                <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) setDialogError("");
+          }}
+        >
+          <DialogContent className="fixed inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 sm:inset-1/2 sm:h-[92dvh] sm:w-[min(42rem,calc(100vw-24px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[28px] sm:border">
+            <div className="flex h-full min-h-0 flex-col bg-white">
+              <div className="shrink-0 border-b bg-white px-4 py-4 pt-[calc(16px+env(safe-area-inset-top))] sm:px-6 sm:pt-4">
+                <DialogHeader className="text-left">
+                  <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
+                </DialogHeader>
               </div>
-              <Switch
-                checked={draft.hasReceipt}
-                onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
-              />
-            </div>
 
-            {!draft.hasReceipt && (
-              <div className="md:col-span-2">
-                <Field label="Reden geen bon">
-                  <Input
-                    className="h-11 rounded-2xl"
-                    value={draft.noReceiptReason}
-                    onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })}
-                  />
-                </Field>
-              </div>
-            )}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-40 sm:px-6 sm:py-6 sm:pb-32">
+                <div className="space-y-4">
+                  {dialogError && (
+                    <Alert className="rounded-3xl border-red-200 bg-red-50 text-red-900">
+                      <AlertDescription>{dialogError}</AlertDescription>
+                    </Alert>
+                  )}
 
-            <div className="md:col-span-2">
-              <Field label="Opmerking">
-                <Textarea
-                  className="rounded-2xl"
-                  value={draft.note}
-                  onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                  rows={3}
-                />
-              </Field>
-            </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Datum">
+                      <Input
+                        className="h-11 rounded-2xl"
+                        type="date"
+                        value={draft.date}
+                        onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                      />
+                    </Field>
 
-            <div className="md:col-span-2 space-y-2">
-              <Label>Foto of bestand van bon</Label>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                capture="environment"
-                className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
-                key={draft.id}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+                    <Field label="Bedrag (€)">
+                      <Input
+                        className="h-11 rounded-2xl"
+                        value={draft.amount}
+                        onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                        placeholder="12,50"
+                      />
+                    </Field>
 
-                  setDialogError("");
-                  setDraft((prev) => {
-                    const nextAttachmentName = buildAttachmentFilenameFromFile(
-                      file,
-                      prev,
-                      settings.signatureName || prev.submitterName || "Jorgo"
-                    );
+                    <Field label="Leverancier">
+                      <Input
+                        className="h-11 rounded-2xl"
+                        value={draft.supplier}
+                        onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
+                      />
+                    </Field>
 
-                    return {
-                      ...prev,
-                      attachment: file,
-                      attachmentName: nextAttachmentName,
-                      attachmentType: file.type,
-                    };
-                  });
-                }}
-              />
+                    <Field label="Reden">
+                      <Input
+                        className="h-11 rounded-2xl"
+                        value={draft.reason}
+                        onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
+                      />
+                    </Field>
 
-              {draft.attachmentName && (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Upload className="h-4 w-4" />
-                  <span className="break-all">{draft.attachmentName}</span>
+                    <div className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="font-medium text-slate-900">Bon aanwezig</div>
+                        <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
+                      </div>
+                      <Switch
+                        checked={draft.hasReceipt}
+                        onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
+                      />
+                    </div>
+
+                    {!draft.hasReceipt && (
+                      <div className="md:col-span-2">
+                        <Field label="Reden geen bon">
+                          <Input
+                            className="h-11 rounded-2xl"
+                            value={draft.noReceiptReason}
+                            onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })}
+                          />
+                        </Field>
+                      </div>
+                    )}
+
+                    <div className="md:col-span-2">
+                      <Field label="Opmerking">
+                        <Textarea
+                          className="rounded-2xl"
+                          value={draft.note}
+                          onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                          rows={3}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                      <Label>Foto of bestand van bon</Label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        capture="environment"
+                        className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                        key={draft.id}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          setDialogError("");
+                          setDraft((prev) => {
+                            const nextAttachmentName = buildAttachmentFilenameFromFile(
+                              file,
+                              prev,
+                              settings.signatureName || prev.submitterName || "Jorgo"
+                            );
+
+                            return {
+                              ...prev,
+                              attachment: file,
+                              attachmentName: nextAttachmentName,
+                              attachmentType: file.type,
+                            };
+                          });
+                        }}
+                      />
+
+                      {draft.attachmentName && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                          <Upload className="h-4 w-4" />
+                          <span className="break-all">{draft.attachmentName}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
+                <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    onClick={() => {
+                      setDialogError("");
+                      setIsDialogOpen(false);
+                    }}
+                  >
+                    Annuleren
+                  </Button>
+
+                  <Button
+                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    onClick={saveDraft}
+                    disabled={isSavingDraft}
+                  >
+                    {isSavingDraft ? "Opslaan..." : "Opslaan"}
+                  </Button>
+                </DialogFooter>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
-        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button
-            variant="outline"
-            className="h-11 rounded-2xl sm:min-w-[140px]"
-            onClick={() => {
-              setDialogError("");
-              setIsDialogOpen(false);
-            }}
-          >
-            Annuleren
-          </Button>
-
-          <Button
-            className="h-11 rounded-2xl sm:min-w-[140px]"
-            onClick={saveDraft}
-            disabled={isSavingDraft}
-          >
-            {isSavingDraft ? "Opslaan..." : "Opslaan"}
-          </Button>
-        </DialogFooter>
-      </div>
-    </div>
-  </DialogContent>
-</Dialog>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
