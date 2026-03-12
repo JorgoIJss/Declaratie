@@ -24,18 +24,16 @@ import {
   Save,
   Eye,
   Paperclip,
+  Mail,
 } from "lucide-react";
 
 const SETTINGS_ROW_ID = "00000000-0000-0000-0000-000000000001";
 const RECEIPTS_BUCKET = "declaratie-bonnen";
+const SEND_DECLARATION_ENDPOINT =
+  "https://aecakvgfqpcgoagzangn.supabase.co/functions/v1/send-declaration";
 
 const defaultSettings = {
-  smtpHost: "",
-  smtpPort: "587",
-  smtpSecure: true,
-  smtpUsername: "",
-  smtpPassword: "",
-  fromEmail: "",
+  fromEmail: "Declaraties <declaraties_amervallei@growth-dynamics.nl>",
   toEmail: "penningmeester@amervallei.nl",
   fromName: "J. IJsselsteijn",
   iban: "NL37INGB07492765333",
@@ -89,15 +87,44 @@ function detailText(d) {
   return bits.join(" | ");
 }
 
-function buildUniqueFileName(declaration, index, submitterName = "Jorgo") {
-  const ext = declaration.attachmentName?.split(".").pop() || "jpg";
-  const stamp = new Date(declaration.createdAt || new Date().toISOString())
-    .toISOString()
-    .replace(/[:.]/g, "-");
+function getFileExtension(filename) {
+  const name = String(filename || "");
+  if (!name.includes(".")) return "jpg";
+  return name.split(".").pop().toLowerCase() || "jpg";
+}
 
-  return `${compactDate(declaration.date)}_${fileSafe(declaration.supplier)}_${fileSafe(
-    declaration.reason
-  )}_${index}_${stamp}_${fileSafe(submitterName)}.${ext}`;
+function buildAttachmentFilename(declaration, submitterName = "Jorgo", index = null) {
+  const original = declaration.attachmentName || "bon.jpg";
+  const ext = getFileExtension(original);
+  const parts = [
+    compactDate(declaration.date),
+    fileSafe(declaration.supplier),
+    fileSafe(declaration.reason),
+  ];
+
+  if (index !== null && index !== undefined) {
+    parts.push(String(index));
+  }
+
+  parts.push(fileSafe(submitterName));
+
+  return `${parts.filter(Boolean).join("__")}.${ext}`;
+}
+
+function buildAttachmentFilenameFromFile(file, declaration, submitterName = "Jorgo") {
+  const ext = getFileExtension(file?.name);
+  return `${[
+    compactDate(declaration.date),
+    fileSafe(declaration.supplier),
+    fileSafe(declaration.reason),
+    fileSafe(submitterName),
+  ]
+    .filter(Boolean)
+    .join("__")}.${ext}`;
+}
+
+function buildUniqueFileName(declaration, index, submitterName = "Jorgo") {
+  return buildAttachmentFilename(declaration, submitterName, index);
 }
 
 function escapeHtml(value) {
@@ -110,123 +137,78 @@ function escapeHtml(value) {
 }
 
 function buildEmailData(batch, settings) {
-  if (batch.length === 1) {
-    const d = batch[0];
-    const subject = `Declaratie BGA - ${compactDate(d.date)}_${fileSafe(d.supplier)}_${fileSafe(
-      d.reason
-    )}`;
-
-    const header =
-      "Nr   Datum       Leverancier        Reden               Bedrag     Bon   Opmerking                 Bestandsnaam";
-    const separator =
-      "------------------------------------------------------------------------------------------------------------------------";
-
-    const row = `1   ${compactDate(d.date).padEnd(12)}${(d.supplier || "")
-      .padEnd(18)}${(d.reason || "").padEnd(18)}${euro(d.amount).padEnd(10)}${(
-      d.hasReceipt ? "Ja" : "Nee"
-    ).padEnd(5)}${(detailText(d) || "").padEnd(25)}${buildUniqueFileName(
-      d,
-      1,
-      settings.signatureName
-    )}`;
-
-    const textBody = `Beste penningmeester,\n\nHierbij dien ik een declaratie in.\n\n${header}\n${separator}\n${row}\n\nIBAN: ${settings.iban}\nTen name van: ${settings.accountName}\n\nMet vriendelijke groet,\n${settings.signatureName}`;
-
-    const htmlBody = `
-      <html>
-        <body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827;">
-          <p>Beste penningmeester,</p>
-          <p>Hierbij dien ik een declaratie in.</p>
-          <table style="border-collapse:collapse;width:100%;">
-            <thead>
-              <tr>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Nr</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Datum</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Leverancier</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Reden</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bedrag</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bon</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Opmerking</th>
-                <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bestandsnaam</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding:8px;border:1px solid #d4d4d8;">1</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${compactDate(d.date)}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(d.supplier)}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(d.reason)}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(euro(d.amount))}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${d.hasReceipt ? "Ja" : "Nee"}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(detailText(d))}</td>
-                <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(
-                  buildUniqueFileName(d, 1, settings.signatureName)
-                )}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p>IBAN: ${escapeHtml(settings.iban)}<br>Ten name van: ${escapeHtml(
-      settings.accountName
-    )}</p>
-          <p>Met vriendelijke groet,<br>${escapeHtml(settings.signatureName)}</p>
-        </body>
-      </html>`;
-
-    return {
-      subject,
-      textBody,
-      htmlBody,
-      mode: "single",
-    };
-  }
-
-  const subject = `Declaraties BGA - batch ${new Date().toLocaleString("nl-NL")}`;
-
-  const rows = batch
-    .map(
-      (d, idx) => `
-    <tr>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${idx + 1}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${compactDate(d.date)}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(d.supplier)}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(d.reason)}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(euro(d.amount))}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${d.hasReceipt ? "Ja" : "Nee"}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(detailText(d))}</td>
-      <td style="padding:8px;border:1px solid #d4d4d8;">${escapeHtml(
-        buildUniqueFileName(d, idx + 1, settings.signatureName)
-      )}</td>
-    </tr>`
-    )
-    .join("\n");
-
   const total = batch.reduce(
     (sum, d) => sum + (Number(String(d.amount).replace(",", ".")) || 0),
     0
   );
 
+  const subject =
+    batch.length === 1
+      ? `Declaratie BGA - ${compactDate(batch[0].date)}_${fileSafe(batch[0].supplier)}_${fileSafe(
+          batch[0].reason
+        )}`
+      : `Declaraties BGA - batch ${new Date().toLocaleString("nl-NL")}`;
+
+  const rows = batch
+    .map(
+      (d, idx) => `
+      <tr>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${idx + 1}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${escapeHtml(
+          compactDate(d.date)
+        )}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${escapeHtml(
+          d.supplier
+        )}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${escapeHtml(
+          d.reason
+        )}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;white-space:nowrap;">${escapeHtml(
+          euro(d.amount)
+        )}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${
+          d.hasReceipt ? "Ja" : "Nee"
+        }</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${escapeHtml(
+          detailText(d) || "-"
+        )}</td>
+        <td style="padding:10px;border:1px solid #d4d4d8;vertical-align:top;">${escapeHtml(
+          d.attachmentName ? buildUniqueFileName(d, idx + 1, settings.signatureName) : "-"
+        )}</td>
+      </tr>`
+    )
+    .join("\n");
+
   const htmlBody = `
     <html>
-      <body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827;">
+      <body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827;line-height:1.5;">
         <p>Beste penningmeester,</p>
-        <p>Hierbij dien ik <strong>${batch.length}</strong> declaraties in.</p>
+        <p>Hierbij dien ik ${batch.length === 1 ? "een declaratie" : `<strong>${batch.length}</strong> declaraties`} in.</p>
         <table style="border-collapse:collapse;width:100%;">
           <thead>
             <tr>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Nr</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Datum</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Leverancier</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Reden</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bedrag</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bon</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Opmerking</th>
-              <th style="padding:8px;border:1px solid #d4d4d8;text-align:left;">Bestandsnaam</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Nr</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Datum</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Leverancier</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Reden</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Bedrag</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Bon</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Opmerking</th>
+              <th style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:left;">Bestandsnaam</th>
             </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>
+            ${rows}
+            <tr>
+              <td colspan="4" style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;text-align:right;"><strong>Totaal</strong></td>
+              <td style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;"><strong>${escapeHtml(
+                euro(total)
+              )}</strong></td>
+              <td colspan="3" style="padding:10px;border:1px solid #d4d4d8;background:#f8fafc;"></td>
+            </tr>
+          </tbody>
         </table>
-        <p><strong>Totaal: ${euro(total)}</strong></p>
-        <p>IBAN: ${escapeHtml(settings.iban)}<br>Ten name van: ${escapeHtml(
+        <p style="margin-top:18px;">IBAN: ${escapeHtml(settings.iban)}<br>Ten name van: ${escapeHtml(
     settings.accountName
   )}</p>
         <p>Met vriendelijke groet,<br>${escapeHtml(settings.signatureName)}</p>
@@ -234,9 +216,9 @@ function buildEmailData(batch, settings) {
     </html>`;
 
   const header =
-    "Nr   Datum       Leverancier        Reden               Bedrag     Bon   Opmerking                 Bestandsnaam";
+    "Nr   Datum       Leverancier        Reden               Bedrag      Bon   Opmerking                 Bestandsnaam";
   const separator =
-    "------------------------------------------------------------------------------------------------------------------------";
+    "--------------------------------------------------------------------------------------------------------------------------";
 
   const textRows = batch
     .map((d, idx) => {
@@ -244,38 +226,34 @@ function buildEmailData(batch, settings) {
       const datum = compactDate(d.date).padEnd(12);
       const leverancier = (d.supplier || "").substring(0, 18).padEnd(18);
       const reden = (d.reason || "").substring(0, 18).padEnd(18);
-      const bedrag = euro(d.amount).padEnd(10);
+      const bedrag = euro(d.amount).padEnd(12);
       const bon = (d.hasReceipt ? "Ja" : "Nee").padEnd(5);
-      const opmerking = (detailText(d) || "").substring(0, 25).padEnd(25);
-      const bestandsnaam = buildUniqueFileName(d, idx + 1, settings.signatureName);
+      const opmerking = (detailText(d) || "-").substring(0, 25).padEnd(25);
+      const bestandsnaam = d.attachmentName
+        ? buildUniqueFileName(d, idx + 1, settings.signatureName)
+        : "-";
       return `${nr}${datum}${leverancier}${reden}${bedrag}${bon}${opmerking}${bestandsnaam}`;
     })
     .join("\n");
 
-  const textBody = `Beste penningmeester,\n\nHierbij dien ik ${batch.length} declaraties in.\n\n${header}\n${separator}\n${textRows}\n\nTotaal batch: ${euro(
-    total
-  )}\n\nIBAN: ${settings.iban}\nTen name van: ${settings.accountName}\n\nMet vriendelijke groet,\n${
-    settings.signatureName
-  }`;
+  const textBody = `Beste penningmeester,\n\nHierbij dien ik ${
+    batch.length === 1 ? "een declaratie" : `${batch.length} declaraties`
+  } in.\n\n${header}\n${separator}\n${textRows}\n\nTotaal batch: ${euro(total)}\n\nIBAN: ${
+    settings.iban
+  }\nTen name van: ${settings.accountName}\n\nMet vriendelijke groet,\n${settings.signatureName}`;
 
   return {
     subject,
     textBody,
     htmlBody,
-    mode: "batch",
+    mode: batch.length === 1 ? "single" : "batch",
   };
 }
 
 function mapSettingsFromDb(row) {
   if (!row) return { ...defaultSettings };
-
   return {
     ...defaultSettings,
-    smtpHost: row.smtp_host ?? defaultSettings.smtpHost,
-    smtpPort: row.smtp_port ?? defaultSettings.smtpPort,
-    smtpSecure: row.smtp_secure ?? defaultSettings.smtpSecure,
-    smtpUsername: row.smtp_username ?? defaultSettings.smtpUsername,
-    smtpPassword: row.smtp_password ?? defaultSettings.smtpPassword,
     fromEmail: row.from_email ?? defaultSettings.fromEmail,
     toEmail: row.to_email ?? defaultSettings.toEmail,
     fromName: row.from_name ?? defaultSettings.fromName,
@@ -290,11 +268,6 @@ function mapSettingsFromDb(row) {
 function mapSettingsToDb(settings) {
   return {
     id: SETTINGS_ROW_ID,
-    smtp_host: settings.smtpHost,
-    smtp_port: settings.smtpPort,
-    smtp_secure: settings.smtpSecure,
-    smtp_username: settings.smtpUsername,
-    smtp_password: settings.smtpPassword,
     from_email: settings.fromEmail,
     to_email: settings.toEmail,
     from_name: settings.fromName,
@@ -366,6 +339,11 @@ export default function DeclaratiesWebApp() {
     groups: [],
     sendIndividually: false,
   });
+  const [previewUi, setPreviewUi] = useState({
+    zoom: 100,
+    width: 1000,
+    height: 620,
+  });
 
   const settingsLoadedRef = useRef(false);
   const settingsAutoSaveTimeoutRef = useRef(null);
@@ -381,7 +359,6 @@ export default function DeclaratiesWebApp() {
 
     async function loadAppData() {
       setIsBootLoading(true);
-
       try {
         const [settingsRes, batchRes, historyRes] = await Promise.all([
           supabase.from("user_settings").select("*").eq("id", SETTINGS_ROW_ID).maybeSingle(),
@@ -392,7 +369,6 @@ export default function DeclaratiesWebApp() {
         if (settingsRes.error) throw settingsRes.error;
         if (batchRes.error) throw batchRes.error;
         if (historyRes.error) throw historyRes.error;
-
         if (!active) return;
 
         setSettings(mapSettingsFromDb(settingsRes.data));
@@ -410,13 +386,9 @@ export default function DeclaratiesWebApp() {
         settingsLoadedRef.current = true;
       } catch (err) {
         console.error(err);
-        if (active) {
-          setMessage(`Laden uit Supabase mislukt: ${err.message}`);
-        }
+        if (active) setMessage(`Laden uit Supabase mislukt: ${err.message}`);
       } finally {
-        if (active) {
-          setIsBootLoading(false);
-        }
+        if (active) setIsBootLoading(false);
       }
     }
 
@@ -432,11 +404,7 @@ export default function DeclaratiesWebApp() {
 
   useEffect(() => {
     if (!settingsLoadedRef.current || isBootLoading) return;
-
-    if (settingsAutoSaveTimeoutRef.current) {
-      clearTimeout(settingsAutoSaveTimeoutRef.current);
-    }
-
+    if (settingsAutoSaveTimeoutRef.current) clearTimeout(settingsAutoSaveTimeoutRef.current);
     settingsAutoSaveTimeoutRef.current = setTimeout(async () => {
       try {
         await upsertSettings(settings, false);
@@ -444,31 +412,22 @@ export default function DeclaratiesWebApp() {
         console.error(err);
       }
     }, 700);
-
     return () => {
-      if (settingsAutoSaveTimeoutRef.current) {
-        clearTimeout(settingsAutoSaveTimeoutRef.current);
-      }
+      if (settingsAutoSaveTimeoutRef.current) clearTimeout(settingsAutoSaveTimeoutRef.current);
     };
   }, [settings, isBootLoading]);
 
   async function upsertSettings(nextSettings, showFeedback = true) {
     setIsSavingSettings(true);
-
     const { error } = await supabase
       .from("user_settings")
       .upsert(mapSettingsToDb(nextSettings), { onConflict: "id" });
-
     setIsSavingSettings(false);
-
     if (error) {
       if (showFeedback) setMessage(`Opslaan instellingen mislukt: ${error.message}`);
       throw error;
     }
-
-    if (showFeedback) {
-      setMessage("Instellingen opgeslagen in Supabase.");
-    }
+    if (showFeedback) setMessage("Instellingen opgeslagen in Supabase.");
   }
 
   async function uploadAttachment(file, declaration) {
@@ -481,26 +440,24 @@ export default function DeclaratiesWebApp() {
       };
     }
 
-    const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
-    const fileName = `${declaration.id}-${Date.now()}.${ext}`;
-    const filePath = `receipts/${fileName}`;
+    const cleanFileName = buildAttachmentFilenameFromFile(
+      file,
+      declaration,
+      settings.signatureName || declaration.submitterName || "Jorgo"
+    );
+    const filePath = `receipts/${declaration.id}-${cleanFileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(RECEIPTS_BUCKET)
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: file.type || "application/octet-stream",
-      });
-
+    const { error: uploadError } = await supabase.storage.from(RECEIPTS_BUCKET).upload(filePath, file, {
+      upsert: true,
+      contentType: file.type || "application/octet-stream",
+    });
     if (uploadError) throw uploadError;
 
-    const { data: publicUrlData } = supabase.storage
-      .from(RECEIPTS_BUCKET)
-      .getPublicUrl(filePath);
+    const { data: publicUrlData } = supabase.storage.from(RECEIPTS_BUCKET).getPublicUrl(filePath);
 
     return {
-      attachmentName: file.name,
-      attachmentType: file.type || declaration.attachmentType || "",
+      attachmentName: cleanFileName,
+      attachmentType: file.type || declaration.attachmentType || "application/octet-stream",
       attachmentPath: filePath,
       attachmentPublicUrl: publicUrlData?.publicUrl || "",
     };
@@ -509,9 +466,7 @@ export default function DeclaratiesWebApp() {
   async function removeAttachmentByPath(filePath) {
     if (!filePath) return;
     const { error } = await supabase.storage.from(RECEIPTS_BUCKET).remove([filePath]);
-    if (error) {
-      console.error("Verwijderen bijlage mislukt:", error.message);
-    }
+    if (error) console.error("Verwijderen bijlage mislukt:", error.message);
   }
 
   function openNewDialog() {
@@ -530,31 +485,26 @@ export default function DeclaratiesWebApp() {
 
   async function saveDraft() {
     setDialogError("");
-
     if (!draft.date || !draft.amount || !draft.supplier || !draft.reason) {
       setDialogError("Vul datum, bedrag, leverancier en reden in.");
       return;
     }
-
     const normalizedAmount = Number(String(draft.amount).replace(",", "."));
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
       setDialogError("Vul een geldig bedrag in, bijvoorbeeld 12,50.");
       return;
     }
-
+    const hasExistingAttachment = Boolean(draft.attachment || draft.attachmentName);
+    if (!hasExistingAttachment && draft.hasReceipt) {
+      setDialogError("Voeg een foto of bestand van de bon toe.");
+      return;
+    }
     if (!draft.hasReceipt && !draft.noReceiptReason) {
       setDialogError("Vul een reden in als er geen bon aanwezig is.");
       return;
     }
 
-    const hasExistingAttachment = Boolean(draft.attachment || draft.attachmentName);
-    if (!hasExistingAttachment) {
-      setDialogError("Voeg een foto of bestand van de bon toe.");
-      return;
-    }
-
     setIsSavingDraft(true);
-
     try {
       const previousVersion = editingId ? batch.find((x) => x.id === editingId) : null;
       const attachmentMeta = await uploadAttachment(draft.attachment, draft);
@@ -578,25 +528,15 @@ export default function DeclaratiesWebApp() {
       };
 
       const payload = mapDeclarationToDb(normalized);
-      const { error } = await supabase.from("declarations").upsert(payload, {
-        onConflict: "id",
-      });
-
+      const { error } = await supabase.from("declarations").upsert(payload, { onConflict: "id" });
       if (error) throw error;
 
       setBatch((prev) => {
-        const next = editingId
-          ? prev.map((x) => (x.id === editingId ? normalized : x))
-          : [...prev, normalized];
-
+        const next = editingId ? prev.map((x) => (x.id === editingId ? normalized : x)) : [...prev, normalized];
         return next.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
       });
 
-      setMessage(
-        editingId
-          ? "Declaratie bijgewerkt in Supabase."
-          : "Declaratie toegevoegd aan de batch in Supabase."
-      );
+      setMessage(editingId ? "Declaratie bijgewerkt in Supabase." : "Declaratie toegevoegd aan de batch in Supabase.");
       setDialogError("");
       setIsDialogOpen(false);
       setDraft(blankDraft());
@@ -611,15 +551,10 @@ export default function DeclaratiesWebApp() {
 
   async function deleteDraft(id) {
     const item = batch.find((x) => x.id === id);
-
     try {
       const { error } = await supabase.from("declarations").delete().eq("id", id);
       if (error) throw error;
-
-      if (item?.attachmentPath) {
-        await removeAttachmentByPath(item.attachmentPath);
-      }
-
+      if (item?.attachmentPath) await removeAttachmentByPath(item.attachmentPath);
       setBatch((prev) => prev.filter((x) => x.id !== id));
       setMessage("Declaratie verwijderd uit Supabase.");
     } catch (err) {
@@ -630,17 +565,12 @@ export default function DeclaratiesWebApp() {
 
   async function clearBatch() {
     if (!batch.length) return;
-
     try {
+      const ids = batch.map((item) => item.id).filter(Boolean);
       const filePaths = batch.map((item) => item.attachmentPath).filter(Boolean);
-
-      const { error } = await supabase.from("declarations").delete().neq("id", "__none__");
+      const { error } = await supabase.from("declarations").delete().in("id", ids);
       if (error) throw error;
-
-      if (filePaths.length) {
-        await supabase.storage.from(RECEIPTS_BUCKET).remove(filePaths);
-      }
-
+      if (filePaths.length) await supabase.storage.from(RECEIPTS_BUCKET).remove(filePaths);
       setBatch([]);
       setMessage("Batch geleegd in Supabase.");
     } catch (err) {
@@ -654,7 +584,6 @@ export default function DeclaratiesWebApp() {
       setMessage("Voeg eerst minimaal één declaratie toe.");
       return;
     }
-
     const groups = sendIndividually ? batch.map((d) => [d]) : [batch];
     setPreviewState({ open: true, groups, sendIndividually });
     setMessage("");
@@ -662,7 +591,6 @@ export default function DeclaratiesWebApp() {
 
   async function insertHistoryGroup(group, emailData) {
     const historyId = crypto.randomUUID();
-
     const historyRow = {
       id: historyId,
       sent_at: new Date().toISOString(),
@@ -688,10 +616,7 @@ export default function DeclaratiesWebApp() {
       position: index + 1,
     }));
 
-    const { error: itemsError } = await supabase
-      .from("send_history_items")
-      .insert(itemRows);
-
+    const { error: itemsError } = await supabase.from("send_history_items").insert(itemRows);
     if (itemsError) throw itemsError;
 
     return {
@@ -703,20 +628,46 @@ export default function DeclaratiesWebApp() {
     };
   }
 
-  async function sendBatch(sendIndividually = settings.sendIndividuallyByDefault) {
-    if (
-      !settings.smtpHost ||
-      !settings.smtpPort ||
-      !settings.smtpUsername ||
-      !settings.smtpPassword ||
-      !settings.fromEmail ||
-      !settings.toEmail
-    ) {
-      setTab("settings");
-      setMessage("Vul eerst de SMTP-instellingen in op de instellingenpagina.");
-      return;
+  async function sendGroupToEdgeFunction(group) {
+    const emailData = buildEmailData(group, settings);
+    const attachments = group
+      .filter((item) => item.attachmentName && (item.attachmentPublicUrl || item.attachmentPath))
+      .map((item, index) => ({
+        filename: buildUniqueFileName(item, index + 1, settings.signatureName),
+        url: item.attachmentPublicUrl || null,
+        path: item.attachmentPath || null,
+        contentType: item.attachmentType || "application/octet-stream",
+      }));
+
+    const response = await fetch(SEND_DECLARATION_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        subject: emailData.subject,
+        html: emailData.htmlBody,
+        text: emailData.textBody,
+        toEmail: settings.toEmail,
+        fromEmail: settings.fromEmail,
+        attachments,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.success === false) {
+      throw new Error(data?.error || data?.message || "Mail verzenden mislukt.");
     }
 
+    return { responseData: data, emailData };
+  }
+
+  async function sendBatch(sendIndividually = settings.sendIndividuallyByDefault) {
+    if (!settings.fromEmail || !settings.toEmail) {
+      setTab("settings");
+      setMessage("Vul eerst het van- en naaradres in op de instellingenpagina.");
+      return;
+    }
     if (!batch.length) {
       setMessage("Voeg eerst minimaal één declaratie toe.");
       return;
@@ -728,30 +679,30 @@ export default function DeclaratiesWebApp() {
     try {
       const groups = sendIndividually ? batch.map((d) => [d]) : [batch];
       const historyEntries = [];
+      const sentIds = [];
+      const sentPaths = [];
 
       for (const group of groups) {
-        const emailData = buildEmailData(group, settings);
+        const { emailData } = await sendGroupToEdgeFunction(group);
         const historyEntry = await insertHistoryGroup(group, emailData);
         historyEntries.push(historyEntry);
+        sentIds.push(...group.map((item) => item.id).filter(Boolean));
+        sentPaths.push(...group.map((item) => item.attachmentPath).filter(Boolean));
       }
 
-      const filePaths = batch.map((item) => item.attachmentPath).filter(Boolean);
+      if (sentIds.length) {
+        const { error: deleteError } = await supabase.from("declarations").delete().in("id", sentIds);
+        if (deleteError) throw deleteError;
+      }
 
-      const { error: deleteError } = await supabase
-        .from("declarations")
-        .delete()
-        .neq("id", "__none__");
-
-      if (deleteError) throw deleteError;
-
-      if (filePaths.length) {
-        await supabase.storage.from(RECEIPTS_BUCKET).remove(filePaths);
+      if (sentPaths.length) {
+        await supabase.storage.from(RECEIPTS_BUCKET).remove(sentPaths);
       }
 
       setHistory((prev) => [...historyEntries, ...prev]);
-      setBatch([]);
+      setBatch((prev) => prev.filter((item) => !sentIds.includes(item.id)));
       setTab("declaraties");
-      setMessage("Demo: mail verwerkt, historie opgeslagen in Supabase en batch geleegd.");
+      setMessage(`Mail${groups.length > 1 ? "s" : ""} verzonden, historie opgeslagen en batch bijgewerkt.`);
     } catch (err) {
       console.error(err);
       setMessage(`Verzenden mislukt: ${err.message}`);
@@ -775,8 +726,7 @@ export default function DeclaratiesWebApp() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Declaraties webapp</h1>
             <p className="text-sm text-slate-600">
-              Alle batch-, historie-, settings- en bondata worden uit Supabase geladen
-              en daarin opgeslagen.
+              Alle batch-, historie-, settings- en bondata worden uit Supabase geladen en daarin opgeslagen.
             </p>
           </div>
 
@@ -800,32 +750,18 @@ export default function DeclaratiesWebApp() {
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 rounded-2xl">
-            <TabsTrigger value="declaraties">
-              <Receipt className="mr-2 h-4 w-4" />
-              Declaraties
-            </TabsTrigger>
-            <TabsTrigger value="historie">
-              <History className="mr-2 h-4 w-4" />
-              Historie
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </TabsTrigger>
+            <TabsTrigger value="declaraties"><Receipt className="mr-2 h-4 w-4" />Declaraties</TabsTrigger>
+            <TabsTrigger value="historie"><History className="mr-2 h-4 w-4" />Historie</TabsTrigger>
+            <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4" />Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="declaraties" className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
               <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle>Huidige batch</CardTitle>
-                </CardHeader>
-
+                <CardHeader><CardTitle>Huidige batch</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {batch.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">
-                      Nog geen declaraties toegevoegd.
-                    </div>
+                    <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">Nog geen declaraties toegevoegd.</div>
                   ) : (
                     <div className="overflow-hidden rounded-2xl border bg-white">
                       <Table>
@@ -840,7 +776,6 @@ export default function DeclaratiesWebApp() {
                             <TableHead>Acties</TableHead>
                           </TableRow>
                         </TableHeader>
-
                         <TableBody>
                           {batch.map((item, idx) => (
                             <TableRow key={item.id}>
@@ -849,27 +784,11 @@ export default function DeclaratiesWebApp() {
                               <TableCell>{item.supplier}</TableCell>
                               <TableCell>{item.reason}</TableCell>
                               <TableCell>{euro(item.amount)}</TableCell>
-                              <TableCell>
-                                <Badge variant={item.hasReceipt ? "default" : "secondary"}>
-                                  {item.hasReceipt ? "Ja" : "Nee"}
-                                </Badge>
-                              </TableCell>
+                              <TableCell><Badge variant={item.hasReceipt ? "default" : "secondary"}>{item.hasReceipt ? "Ja" : "Nee"}</Badge></TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => openEditDialog(item)}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => deleteDraft(item.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => openEditDialog(item)}><Pencil className="h-4 w-4" /></Button>
+                                  <Button size="sm" variant="outline" onClick={() => deleteDraft(item.id)}><Trash2 className="h-4 w-4" /></Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -882,56 +801,21 @@ export default function DeclaratiesWebApp() {
               </Card>
 
               <Card className="rounded-3xl shadow-sm">
-                <CardHeader>
-                  <CardTitle>Acties</CardTitle>
-                </CardHeader>
-
+                <CardHeader><CardTitle>Acties</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-2xl bg-slate-100 p-4">
                     <div className="text-sm text-slate-500">Aantal declaraties</div>
                     <div className="text-2xl font-semibold">{batch.length}</div>
                   </div>
-
                   <div className="rounded-2xl bg-slate-100 p-4">
                     <div className="text-sm text-slate-500">Totaalbedrag</div>
                     <div className="text-2xl font-semibold">{euro(total)}</div>
                   </div>
-
                   <Separator />
-
-                  <Button
-                    className="w-full rounded-2xl"
-                    onClick={() => openPreview(false)}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Bekijk batchmail
-                  </Button>
-
-                  <Button
-                    className="w-full rounded-2xl"
-                    variant="secondary"
-                    onClick={() => openPreview(true)}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Bekijk losse mails
-                  </Button>
-
-                  <Button
-                    className="w-full rounded-2xl"
-                    variant="outline"
-                    onClick={clearBatch}
-                    disabled={isSending || batch.length === 0 || isBootLoading}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Batch leegmaken
-                  </Button>
-
-                  <p className="text-xs text-slate-500">
-                    Ook batch leegmaken, verwijderen, bewerken en historie-opbouw lopen nu
-                    via Supabase.
-                  </p>
+                  <Button className="w-full rounded-2xl" onClick={() => openPreview(false)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk batchmail</Button>
+                  <Button className="w-full rounded-2xl" variant="secondary" onClick={() => openPreview(true)} disabled={isSending || batch.length === 0 || isBootLoading}><Eye className="mr-2 h-4 w-4" />Bekijk losse mails</Button>
+                  <Button className="w-full rounded-2xl" variant="outline" onClick={clearBatch} disabled={isSending || batch.length === 0 || isBootLoading}><Trash2 className="mr-2 h-4 w-4" />Batch leegmaken</Button>
+                  <p className="text-xs text-slate-500">Verzenden loopt via Supabase Edge Function + Resend. Bonnen gaan als bijlage mee.</p>
                 </CardContent>
               </Card>
             </div>
@@ -939,24 +823,17 @@ export default function DeclaratiesWebApp() {
 
           <TabsContent value="historie">
             <Card className="rounded-3xl shadow-sm">
-              <CardHeader>
-                <CardTitle>Historie</CardTitle>
-              </CardHeader>
-
+              <CardHeader><CardTitle>Historie</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {history.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">
-                    Nog geen verzonden batches.
-                  </div>
+                  <div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">Nog geen verzonden batches.</div>
                 ) : (
                   history.map((entry) => (
                     <div key={entry.id} className="rounded-2xl border p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="font-medium">{entry.subject}</div>
-                          <div className="text-sm text-slate-500">
-                            {new Date(entry.sentAt).toLocaleString("nl-NL")} • {entry.mode}
-                          </div>
+                          <div className="text-sm text-slate-500">{new Date(entry.sentAt).toLocaleString("nl-NL")} • {entry.mode}</div>
                         </div>
                         <Badge>{entry.declarations.length} declaratie(s)</Badge>
                       </div>
@@ -969,138 +846,37 @@ export default function DeclaratiesWebApp() {
 
           <TabsContent value="settings">
             <Card className="rounded-3xl shadow-sm">
-              <CardHeader>
-                <CardTitle>Settings</CardTitle>
-              </CardHeader>
-
+              <CardHeader><CardTitle>Settings</CardTitle></CardHeader>
               <CardContent className="space-y-6">
-                <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-900">
+                <Alert className="rounded-2xl border-blue-200 bg-blue-50 text-blue-900">
                   <AlertDescription>
-                    Let op: deze versie schrijft SMTP-instellingen ook weg naar Supabase.
-                    Voor productie is dat alleen verstandig met auth en een backend of
-                    Edge Function.
+                    Deze versie gebruikt je Supabase Edge Function voor verzending. SMTP-velden zijn niet meer nodig; alleen afzender, ontvanger en declaratiegegevens.
                   </AlertDescription>
                 </Alert>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="SMTP host">
-                    <Input
-                      value={settings.smtpHost}
-                      onChange={(e) => setSettings({ ...settings, smtpHost: e.target.value })}
-                      placeholder="smtp.provider.nl"
-                    />
-                  </Field>
-
-                  <Field label="SMTP poort">
-                    <Input
-                      value={settings.smtpPort}
-                      onChange={(e) => setSettings({ ...settings, smtpPort: e.target.value })}
-                      placeholder="587"
-                    />
-                  </Field>
-
-                  <Field label="SMTP gebruikersnaam">
-                    <Input
-                      value={settings.smtpUsername}
-                      onChange={(e) =>
-                        setSettings({ ...settings, smtpUsername: e.target.value })
-                      }
-                    />
-                  </Field>
-
-                  <Field label="SMTP wachtwoord">
-                    <Input
-                      type="password"
-                      value={settings.smtpPassword}
-                      onChange={(e) =>
-                        setSettings({ ...settings, smtpPassword: e.target.value })
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Van e-mailadres">
-                    <Input
-                      value={settings.fromEmail}
-                      onChange={(e) => setSettings({ ...settings, fromEmail: e.target.value })}
-                    />
-                  </Field>
-
-                  <Field label="Van naam">
-                    <Input
-                      value={settings.fromName}
-                      onChange={(e) => setSettings({ ...settings, fromName: e.target.value })}
-                    />
-                  </Field>
-
-                  <Field label="Naar e-mailadres">
-                    <Input
-                      value={settings.toEmail}
-                      onChange={(e) => setSettings({ ...settings, toEmail: e.target.value })}
-                    />
-                  </Field>
-
-                  <Field label="IBAN">
-                    <Input
-                      value={settings.iban}
-                      onChange={(e) => setSettings({ ...settings, iban: e.target.value })}
-                    />
-                  </Field>
-
-                  <Field label="Rekeninghouder">
-                    <Input
-                      value={settings.accountName}
-                      onChange={(e) =>
-                        setSettings({ ...settings, accountName: e.target.value })
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Naam ondertekening">
-                    <Input
-                      value={settings.signatureName}
-                      onChange={(e) =>
-                        setSettings({ ...settings, signatureName: e.target.value })
-                      }
-                    />
-                  </Field>
+                  <Field label="Van e-mailadres"><Input value={settings.fromEmail} onChange={(e) => setSettings({ ...settings, fromEmail: e.target.value })} /></Field>
+                  <Field label="Van naam"><Input value={settings.fromName} onChange={(e) => setSettings({ ...settings, fromName: e.target.value })} /></Field>
+                  <Field label="Naar e-mailadres"><Input value={settings.toEmail} onChange={(e) => setSettings({ ...settings, toEmail: e.target.value })} /></Field>
+                  <Field label="IBAN"><Input value={settings.iban} onChange={(e) => setSettings({ ...settings, iban: e.target.value })} /></Field>
+                  <Field label="Rekeninghouder"><Input value={settings.accountName} onChange={(e) => setSettings({ ...settings, accountName: e.target.value })} /></Field>
+                  <Field label="Naam ondertekening"><Input value={settings.signatureName} onChange={(e) => setSettings({ ...settings, signatureName: e.target.value })} /></Field>
                 </div>
 
                 <div className="flex items-center justify-between rounded-2xl border p-4">
                   <div>
-                    <div className="font-medium">Gebruik TLS / secure SMTP</div>
-                    <div className="text-sm text-slate-500">
-                      Meestal aan voor poort 465, vaak uit voor 587 met STARTTLS op de backend.
-                    </div>
+                    <div className="font-medium">Standaard los versturen</div>
+                    <div className="text-sm text-slate-500">Als dit aan staat, wordt elke declaratie in een aparte mail voorbereid.</div>
                   </div>
-                  <Switch
-                    checked={settings.smtpSecure}
-                    onCheckedChange={(checked) =>
-                      setSettings({ ...settings, smtpSecure: checked })
-                    }
-                  />
+                  <Switch checked={settings.sendIndividuallyByDefault} onCheckedChange={(checked) => setSettings({ ...settings, sendIndividuallyByDefault: checked })} />
                 </div>
 
-                <div className="flex items-center justify-between rounded-2xl border p-4">
-                  <div>
-                    <div className="font-medium">Losse mails standaard</div>
-                    <div className="text-sm text-slate-500">
-                      Als dit aan staat worden declaraties één voor één verwerkt.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={settings.sendIndividuallyByDefault}
-                    onCheckedChange={(checked) =>
-                      setSettings({ ...settings, sendIndividuallyByDefault: checked })
-                    }
-                  />
+                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
+                  <div className="font-medium text-slate-900">Endpoint</div>
+                  <div className="break-all">{SEND_DECLARATION_ENDPOINT}</div>
                 </div>
 
-                <Button
-                  type="button"
-                  className="rounded-2xl"
-                  onClick={saveSettingsToSupabase}
-                  disabled={isSavingSettings || isBootLoading}
-                >
+                <Button type="button" className="rounded-2xl" onClick={saveSettingsToSupabase} disabled={isSavingSettings || isBootLoading}>
                   <Save className="mr-2 h-4 w-4" />
                   {isSavingSettings ? "Opslaan..." : "Opslaan"}
                 </Button>
@@ -1109,80 +885,61 @@ export default function DeclaratiesWebApp() {
           </TabsContent>
         </Tabs>
 
-        <Dialog
-          open={previewState.open}
-          onOpenChange={(open) => setPreviewState((prev) => ({ ...prev, open }))}
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl">
-            <DialogHeader>
-              <DialogTitle>Conceptmail bekijken</DialogTitle>
-            </DialogHeader>
+        <Dialog open={previewState.open} onOpenChange={(open) => setPreviewState((prev) => ({ ...prev, open }))}>
+          <DialogContent className="max-w-[95vw] max-h-[96vh] overflow-y-auto rounded-3xl">
+            <DialogHeader><DialogTitle>Conceptmail bekijken</DialogTitle></DialogHeader>
+
+            <div className="grid gap-4 rounded-2xl border bg-slate-50 p-4 md:grid-cols-3">
+              <Field label={`Zoom (${previewUi.zoom}%)`}>
+                <Input type="range" min="60" max="150" step="5" value={previewUi.zoom} onChange={(e) => setPreviewUi((prev) => ({ ...prev, zoom: Number(e.target.value) }))} />
+              </Field>
+              <Field label={`Breedte (${previewUi.width}px)`}>
+                <Input type="range" min="700" max="1400" step="20" value={previewUi.width} onChange={(e) => setPreviewUi((prev) => ({ ...prev, width: Number(e.target.value) }))} />
+              </Field>
+              <Field label={`Hoogte (${previewUi.height}px)`}>
+                <Input type="range" min="400" max="1000" step="20" value={previewUi.height} onChange={(e) => setPreviewUi((prev) => ({ ...prev, height: Number(e.target.value) }))} />
+              </Field>
+            </div>
 
             <div className="space-y-6">
               {previewState.groups.map((group, groupIndex) => {
                 const emailData = buildEmailData(group, settings);
                 const totalAttachments = group.filter((d) => d.attachmentName).length;
-
                 return (
                   <Card key={groupIndex} className="rounded-3xl border shadow-none">
                     <CardHeader>
-                      <CardTitle className="text-lg">
-                        {previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}
-                      </CardTitle>
+                      <CardTitle className="text-lg">{previewState.sendIndividually ? `Mail ${groupIndex + 1}` : "Batchmail"}</CardTitle>
                     </CardHeader>
-
                     <CardContent className="space-y-4">
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-2xl bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">Aan</div>
-                          <div className="font-medium">{settings.toEmail || "-"}</div>
-                        </div>
-
-                        <div className="rounded-2xl bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">
-                            Onderwerp
-                          </div>
-                          <div className="font-medium">{emailData.subject}</div>
-                        </div>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Aan</div><div className="font-medium break-all">{settings.toEmail || "-"}</div></div>
+                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Van</div><div className="font-medium break-all">{settings.fromEmail || "-"}</div></div>
+                        <div className="rounded-2xl bg-slate-50 p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Onderwerp</div><div className="font-medium">{emailData.subject}</div></div>
                       </div>
 
                       <div className="rounded-2xl border bg-white p-4">
-                        <div className="mb-3 text-sm font-medium text-slate-600">
-                          Voorbeeld van de mail
-                        </div>
-                        <div className="rounded-xl border bg-white p-4">
-                          <div
-                            className="prose prose-sm max-w-none"
-                            dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
-                          />
+                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-600"><Mail className="h-4 w-4" />Voorbeeld van de mail</div>
+                        <div className="overflow-auto rounded-xl border bg-slate-100 p-4">
+                          <div style={{ width: `${previewUi.width}px`, minHeight: `${previewUi.height}px`, transform: `scale(${previewUi.zoom / 100})`, transformOrigin: "top left" }}>
+                            <div className="bg-white p-6 shadow-sm" style={{ width: `${previewUi.width}px`, minHeight: `${previewUi.height}px` }}>
+                              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: emailData.htmlBody }} />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
                       <div className="rounded-2xl border bg-slate-50 p-4">
-                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700">
-                          <Paperclip className="h-4 w-4" />
-                          Bijlagen ({totalAttachments})
-                        </div>
-
+                        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700"><Paperclip className="h-4 w-4" />Bijlagen ({totalAttachments})</div>
                         {totalAttachments === 0 ? (
                           <div className="text-sm text-slate-500">Geen bijlagen toegevoegd.</div>
                         ) : (
                           <div className="space-y-2">
-                            {group.map((item, idx) =>
-                              item.attachmentName ? (
-                                <div
-                                  key={item.id}
-                                  className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm"
-                                >
-                                  <span>
-                                    {buildUniqueFileName(item, idx + 1, settings.signatureName)}
-                                  </span>
-                                  <Badge variant="secondary">
-                                    {item.attachmentType || "bestand"}
-                                  </Badge>
-                                </div>
-                              ) : null
-                            )}
+                            {group.map((item, idx) => item.attachmentName ? (
+                              <div key={item.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm gap-4">
+                                <div className="min-w-0 flex-1 truncate">{buildUniqueFileName(item, idx + 1, settings.signatureName)}</div>
+                                <Badge variant="secondary">{item.attachmentType || "bestand"}</Badge>
+                              </div>
+                            ) : null)}
                           </div>
                         )}
                       </div>
@@ -1193,154 +950,57 @@ export default function DeclaratiesWebApp() {
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
-              >
-                Sluiten
-              </Button>
-
-              <Button
-                onClick={async () => {
-                  setPreviewState((prev) => ({ ...prev, open: false }));
-                  await sendBatch(previewState.sendIndividually);
-                }}
-                disabled={isSending}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Nu echt versturen
+              <Button variant="outline" onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}>Sluiten</Button>
+              <Button onClick={async () => { setPreviewState((prev) => ({ ...prev, open: false })); await sendBatch(previewState.sendIndividually); }} disabled={isSending}>
+                <Send className="mr-2 h-4 w-4" />Nu echt versturen
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog
-          open={isDialogOpen}
-          onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) setDialogError("");
-          }}
-        >
+        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setDialogError(""); }}>
           <DialogContent className="max-w-2xl rounded-3xl">
-            <DialogHeader>
-              <DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle>
-            </DialogHeader>
-
-            {dialogError && (
-              <Alert className="rounded-2xl border-red-200 bg-red-50 text-red-900">
-                <AlertDescription>{dialogError}</AlertDescription>
-              </Alert>
-            )}
-
+            <DialogHeader><DialogTitle>{editingId ? "Declaratie bewerken" : "Nieuwe declaratie"}</DialogTitle></DialogHeader>
+            {dialogError && <Alert className="rounded-2xl border-red-200 bg-red-50 text-red-900"><AlertDescription>{dialogError}</AlertDescription></Alert>}
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Datum">
-                <Input
-                  type="date"
-                  value={draft.date}
-                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Bedrag (€)">
-                <Input
-                  value={draft.amount}
-                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-                  placeholder="12,50"
-                />
-              </Field>
-
-              <Field label="Leverancier">
-                <Input
-                  value={draft.supplier}
-                  onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
-                />
-              </Field>
-
-              <Field label="Reden">
-                <Input
-                  value={draft.reason}
-                  onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
-                />
-              </Field>
-
+              <Field label="Datum"><Input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} /></Field>
+              <Field label="Bedrag (€)"><Input value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} placeholder="12,50" /></Field>
+              <Field label="Leverancier"><Input value={draft.supplier} onChange={(e) => setDraft({ ...draft, supplier: e.target.value })} /></Field>
+              <Field label="Reden"><Input value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} /></Field>
               <div className="md:col-span-2 flex items-center justify-between rounded-2xl border p-4">
-                <div>
-                  <div className="font-medium">Bon aanwezig</div>
-                  <div className="text-sm text-slate-500">Zet uit als er geen bon is.</div>
-                </div>
-                <Switch
-                  checked={draft.hasReceipt}
-                  onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })}
-                />
+                <div><div className="font-medium">Bon aanwezig</div><div className="text-sm text-slate-500">Zet uit als er geen bon is.</div></div>
+                <Switch checked={draft.hasReceipt} onCheckedChange={(checked) => setDraft({ ...draft, hasReceipt: checked })} />
               </div>
-
               {!draft.hasReceipt && (
-                <div className="md:col-span-2">
-                  <Field label="Reden geen bon">
-                    <Input
-                      value={draft.noReceiptReason}
-                      onChange={(e) =>
-                        setDraft({ ...draft, noReceiptReason: e.target.value })
-                      }
-                    />
-                  </Field>
-                </div>
+                <div className="md:col-span-2"><Field label="Reden geen bon"><Input value={draft.noReceiptReason} onChange={(e) => setDraft({ ...draft, noReceiptReason: e.target.value })} /></Field></div>
               )}
-
-              <div className="md:col-span-2">
-                <Field label="Opmerking">
-                  <Textarea
-                    value={draft.note}
-                    onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                    rows={3}
-                  />
-                </Field>
-              </div>
-
+              <div className="md:col-span-2"><Field label="Opmerking"><Textarea value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} rows={3} /></Field></div>
               <div className="md:col-span-2 space-y-2">
                 <Label>Foto of bestand van bon</Label>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  capture="environment"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
-                  key={draft.id}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-
-                    setDialogError("");
-                    setDraft((prev) => ({
+                <input type="file" accept="image/*,.pdf" capture="environment" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium" key={draft.id} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setDialogError("");
+                  setDraft((prev) => {
+                    const nextAttachmentName = buildAttachmentFilenameFromFile(
+                      file,
+                      prev,
+                      settings.signatureName || prev.submitterName || "Jorgo"
+                    );
+                    return {
                       ...prev,
                       attachment: file,
-                      attachmentName: file.name,
+                      attachmentName: nextAttachmentName,
                       attachmentType: file.type,
-                    }));
-                  }}
-                />
-                {draft.attachmentName && (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Upload className="h-4 w-4" />
-                    {draft.attachmentName}
-                  </div>
-                )}
+                    };
+                  });
+                }} />
+                {draft.attachmentName && <div className="flex items-center gap-2 text-sm text-slate-500"><Upload className="h-4 w-4" />{draft.attachmentName}</div>}
               </div>
             </div>
-
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDialogError("");
-                  setIsDialogOpen(false);
-                }}
-              >
-                Annuleren
-              </Button>
-
-              <Button onClick={saveDraft} disabled={isSavingDraft}>
-                {isSavingDraft ? "Opslaan..." : "Opslaan"}
-              </Button>
+              <Button variant="outline" onClick={() => { setDialogError(""); setIsDialogOpen(false); }}>Annuleren</Button>
+              <Button onClick={saveDraft} disabled={isSavingDraft}>{isSavingDraft ? "Opslaan..." : "Opslaan"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
