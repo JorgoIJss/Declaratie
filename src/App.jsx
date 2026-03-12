@@ -13,14 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-
-function sanitizeAttachmentFilename(name) {
-  return String(name || "")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
   Plus,
   Send,
   Trash2,
@@ -146,6 +138,13 @@ function getFileExtension(filename) {
   return name.split(".").pop().toLowerCase() || "jpg";
 }
 
+function sanitizeAttachmentFilename(name) {
+  return String(name || "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function buildAttachmentFilename(declaration, submitterName = "Jorgo", index = null) {
   const original = declaration.attachmentName || "bon.jpg";
   const ext = getFileExtension(original);
@@ -161,19 +160,21 @@ function buildAttachmentFilename(declaration, submitterName = "Jorgo", index = n
 
   parts.push(fileSafe(submitterName));
 
-  return `${parts.filter(Boolean).join("__")}.${ext}`;
+  return sanitizeAttachmentFilename(`${parts.filter(Boolean).join("_")}.${ext}`);
 }
 
 function buildAttachmentFilenameFromFile(file, declaration, submitterName = "Jorgo") {
   const ext = getFileExtension(file?.name);
-  return `${[
-    compactDate(declaration.date),
-    fileSafe(declaration.supplier),
-    fileSafe(declaration.reason),
-    fileSafe(submitterName),
-  ]
-    .filter(Boolean)
-    .join("__")}.${ext}`;
+  return sanitizeAttachmentFilename(
+    `${[
+      compactDate(declaration.date),
+      fileSafe(declaration.supplier),
+      fileSafe(declaration.reason),
+      fileSafe(submitterName),
+    ]
+      .filter(Boolean)
+      .join("_")}.${ext}`
+  );
 }
 
 function buildUniqueFileName(declaration, index, submitterName = "Jorgo") {
@@ -1477,7 +1478,7 @@ export default function DeclaratiesWebApp() {
                       <Label>Foto of bestand van bon</Label>
                       <input
                         type="file"
-                        accept="image/*,.pdf"
+                        accept="image/*,.pdf,.heic,.heif"
                         className="flex h-11 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
                         key={draft.id}
                         onChange={(e) => {
