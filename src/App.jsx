@@ -1244,24 +1244,26 @@ export default function DeclaratiesWebApp() {
                                 Voorbeeld van de mail
                               </div>
 
-                              <div className="overflow-auto rounded-2xl border bg-slate-100 p-3 sm:p-4">
+                              <div className="-mx-4 overflow-x-hidden rounded-none border-y bg-slate-100 px-0 py-3 sm:mx-0 sm:overflow-auto sm:rounded-2xl sm:border sm:px-4 sm:py-4">
                                 <div
+                                  className="w-full sm:w-auto"
                                   style={{
-                                    width: `${previewUi.width}px`,
+                                    width: "100%",
                                     minHeight: `${previewUi.height}px`,
-                                    transform: `scale(${previewUi.zoom / 100})`,
+                                    transform: "none",
                                     transformOrigin: "top left",
                                   }}
                                 >
                                   <div
-                                    className="bg-white p-6 shadow-sm"
+                                    className="bg-white px-4 py-6 shadow-sm sm:p-6"
                                     style={{
-                                      width: `${previewUi.width}px`,
+                                      width: "100%",
                                       minHeight: `${previewUi.height}px`,
+                                      maxWidth: "100%",
                                     }}
                                   >
                                     <div
-                                      className="prose prose-sm max-w-none"
+                                      className="prose prose-sm max-w-none break-words"
                                       dangerouslySetInnerHTML={{ __html: emailData.htmlBody }}
                                     />
                                   </div>
@@ -1306,17 +1308,17 @@ export default function DeclaratiesWebApp() {
               </div>
 
               <div className="shrink-0 border-t bg-white px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:px-6 sm:py-4 sm:pb-4">
-                <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+                <DialogFooter className="w-full flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button
                     variant="outline"
-                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    className="h-11 w-full rounded-2xl sm:w-auto sm:min-w-[140px]"
                     onClick={() => setPreviewState((prev) => ({ ...prev, open: false }))}
                   >
                     Sluiten
                   </Button>
 
                   <Button
-                    className="h-11 rounded-2xl sm:min-w-[140px]"
+                    className="h-11 w-full rounded-2xl sm:w-auto sm:min-w-[140px]"
                     onClick={async () => {
                       setPreviewState((prev) => ({ ...prev, open: false }));
                       await sendBatch(previewState.sendIndividually);
