@@ -196,12 +196,14 @@ function buildEmailData(batch, settings) {
     0
   );
 
+  const firstDeclarationLabel = `${compactDate(batch[0].date)}_${fileSafe(
+    batch[0].supplier
+  )}_${fileSafe(batch[0].reason)}`;
+
   const subject =
     batch.length === 1
-      ? `Declaratie BGA - ${compactDate(batch[0].date)}_${fileSafe(batch[0].supplier)}_${fileSafe(
-          batch[0].reason
-        )}`
-      : `Declaraties BGA - batch ${new Date().toLocaleString("nl-NL")}`;
+      ? `Declaratie BGA - ${firstDeclarationLabel}`
+      : `Declaraties BGA - ${firstDeclarationLabel}`;
 
   const rows = batch
     .map(
